@@ -1,0 +1,26 @@
+# Production override: HTTPS on your domain with automatic Let's Encrypt certificates (Caddy).
+#   1. Point DNS (A record) of DOMAIN to this server; open ports 80 and 443.
+#   2. cp .env.example .env  and set DOMAIN, ACME_EMAIL, JWT_SECRET, passwords.
+#   3. docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+# Backend (8080) and the web server (3000) are no longer published; only Caddy (80/443) is.
+services:
+  backend:
+    ports: !reset []
+  frontend:
+    ports: !reset []
+  caddy:
+    image: caddy:2.8
+    restart: unless-stopped
+    depends_on: [frontend, backend]
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env}
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

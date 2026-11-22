@@ -1,136 +1,132 @@
 # DutyGrid: workforce ERP for security & facility agencies
 
-> The product name, logo and colours are placeholders and can be changed in one place each (see [Rebranding](#rebranding)).
+> "DutyGrid", the logo and the colours are placeholders. You can change each in one place (see [Rebranding](#rebranding)).
 
-A multi-tenant SaaS for security agencies, in the same way MyGate serves many housing societies:
-every agency signs up and runs its own branches, clients, sites, guards, payroll and billing,
-fully isolated from the others.
+A multi-tenant SaaS for security agencies, working the way MyGate serves many housing societies: every agency
+signs up and runs its own branches, clients, sites, guards, attendance, payroll and billing, fully isolated from
+the others. It also works for facility-management agencies (housekeeping, drivers…).
 
-**The problem it solves:** an agency charges each client under that client's contract and pays
-guards under separate wage rules, while guards keep moving between sites (transfers, relief,
-replacements, double duties, extra shifts). DutyGrid values **every duty individually**, so
-payroll and invoices always reconcile, however often people move.
-→ See **[docs/DOMAIN.md](docs/DOMAIN.md)** for the 30 scenarios it handles.
+**The core problem it solves:** an agency charges each client under that client's contract and pays guards
+under separate wage rules, while guards keep moving between sites (transfers, relief, replacements, double duties,
+extra shifts). DutyGrid prices **every duty individually**, both what is charged and what is paid, so payroll and
+invoices always reconcile however often people move.
+
+## Documentation
+
+| Guide | For | What's inside |
+|---|---|---|
+| **[Operations manual](docs/OPERATIONS_MANUAL.md)** | Agency staff | How to use every feature, step by step, per role (web + Android) |
+| **[User guide & screenshots](docs/USER_GUIDE.md)** | Everyone | Which app each person uses, a typical month, screenshots |
+| **[Deployment guide](docs/DEPLOYMENT.md)** | Whoever runs the server | Local run, production with HTTPS, backups, upgrades, Android releases, troubleshooting |
+| **[Configuration reference](docs/CONFIGURATION.md)** | Admins | Every environment variable, agency policy setting, salary rule and role permission |
+| **[Business scenarios](docs/DOMAIN.md)** | Owners, developers | The data model and how 30 real situations are handled (transfers, no-shows, rate changes…) |
+| **[API reference](docs/API.md)** | Integrators | Conventions + every endpoint (live docs at `/swagger-ui`) |
+| **[Architecture](docs/ARCHITECTURE.md)** | Developers | Modules, multi-tenancy, data integrity, reliability |
+| [Mobile app](mobile/README.md) · [Web app](frontend/README.md) | Developers | App-specific build and code notes |
+| `docs/specs/*.pdf` | – | The original product and architecture specifications |
+
+## Quick start (Docker)
+
+Needs only Docker (Docker Desktop, or Docker Engine 24+ with Compose v2.24+).
+
+```bash
+git clone https://github.com/dpchn/agency-workspace-erp.git
+cd agency-workspace-erp
+docker compose up -d --build                    # first build takes 5-10 minutes
+docker compose --profile demo up demo-seed      # optional: a demo agency with one month of data
+```
+
+Open **http://localhost:3000** (API docs: http://localhost:8080/swagger-ui).
+For a real server with your domain and HTTPS, see **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#2-production-server-with-https)**:
+`cp .env.example .env`, edit it, then `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build`.
+
+**Demo logins** (after the seed step):
+
+| Role | Login | Password | Lands on |
+|---|---|---|---|
+| Agency owner | `owner.demo@shield.test` | `Passw0rd!` | Dashboard (everything) |
+| Finance | `fin.demo@shield.test` | `Passw0rd!` | Payroll, invoices |
+| Operations | `ops.demo@shield.test` | `Passw0rd!` | Roster, attendance |
+| Guard | `8dem333333` | `guard123` | Android app / `/guard` on a phone |
+| Client | `client.demo@phoenix.test` | `Client@123` | Client portal |
+
+Or click **Create your account** on the login page to register your own agency.
+
+## Who uses what
+
+| User | App |
+|---|---|
+| Owner, HR, operations, finance | **Web app** (laptop; also works on phones) |
+| Guards | **Android app**: GPS check-in/out that works offline, duties, attendance, payslips, leave, incidents |
+| Supervisors in the field | **Android app**: today's posts and gaps, find/replace a guard, mark attendance, approvals, incidents |
+| Clients (society / mall managers) | **Web portal**: guards on duty today, invoices, statement, incidents |
+| You (SaaS owner) | **Platform console** in the web app: agencies, plans, suspend/restore |
+
+The Android APK is built automatically by GitHub Actions: **Releases → "Android app (latest)" → `app-release.apk`**.
 
 ## Modules
 
 | Area | What's included |
 |---|---|
-| Platform | Agency self-signup with seeded defaults, trial/suspend, plan limits, platform operator view (no access to tenant HR or finance data) |
-| Identity | Login, JWT sessions with revocation, 9 roles + permission matrix, branch/site/client scoping, maker-checker approvals |
-| HR | Employee lifecycle (draft → verification → active → suspended → exited), documents with expiry, deployability gate, guard logins |
-| Clients | Clients, sites (geofence ENFORCE/FLAG/OFF), posts, shift requirements |
-| Contracts | Versioned, effective-dated rate cards; 6 billing models; minimum guarantee, extra-shift and OT rates, absence penalties |
-| Deployment & roster | Permanent/temporary/reliever postings, transfers, auto-roster generation, replacement finder, extra shifts, no double-booking (DB constraint), rest-interval rule |
-| Attendance | Mobile check-in/out, geofence, fraud flags, offline batch sync, day close (no-shows), adjustments, approvals, muster roll |
-| Leave | Apply/approve; releases rostered duties |
-| Payroll | Per-duty valuation across sites, configurable statutory components, advances/bonus, versioned runs, lock, arrears, bank CSV, payslips |
-| Billing | Contract-driven invoices, uncovered-duty deductions, GST (CGST/SGST vs IGST), approval, numbering per financial year, credit notes, supplementary invoices, receipts, aging, statements, printable invoice |
-| Operations | Incidents with SLA escalation |
-| Reports | Dashboard, site/contract margin, guard deployment trail, audit log |
-| Portals | Guard self-service (duties, check-in, payslips, leave) and client portal (deployment today, invoices, incidents) |
+| Platform | Agency self-signup with ready-made defaults, trial/suspend, plan limits, platform operator console (no access to agency data) |
+| Identity | Login by e-mail or mobile, session revocation, 9 roles + permission matrix, branch/site/client scoping, maker-checker approvals |
+| HR | Employee lifecycle (draft → verification → active → suspended → exited), documents with expiry, deployment readiness check, guard app logins |
+| Clients | Clients, sites with geofence (enforce / flag / off), posts, shift requirements |
+| Contracts | Versioned, effective-dated rate cards; 6 billing models; minimum guarantee, extra-shift and OT rates, absence penalties; approval |
+| Deployment & roster | Permanent / temporary / reliever postings, transfers with history, auto-roster, replacement finder, mid-shift handover, double duty, extra shifts, no double-booking, rest-interval rule |
+| Attendance | GPS check-in/out, geofence, fraud flags, offline sync, automatic no-show marking, corrections with approval, muster roll |
+| Leave | Apply / approve; releases rostered duties for replacement |
+| Payroll | Per-duty pay across sites, configurable PF/ESI/PT, advances/bonus, versioned runs, lock, arrears, bank CSV, payslips |
+| Billing | Contract-driven invoices, uncovered-duty deductions, GST (CGST/SGST vs IGST), approval, financial-year numbering, credit notes, supplementary invoices, receipts, aging, statements, printable invoice |
+| Operations | Incidents with response deadlines and automatic escalation |
+| Reports | Dashboard, site/client margin, guard deployment trail, audit log |
 
-## Tech stack
+## Repository layout
 
-* **backend/**: Java 21, Spring Boot 3.3 modular monolith, PostgreSQL 15+ (row-level security), Flyway, OpenAPI at `/swagger-ui`
-* **frontend/**: Next.js 14 (App Router, TypeScript, Tailwind)
-* **docs/**: domain scenarios, architecture, original specifications (`docs/specs/*.pdf`)
-
-## Quick start (Docker): clone and run
-
-Needs only Docker Desktop (or Docker Engine with the compose plugin).
-
-```bash
-git clone https://github.com/dpchn/agency-workspace-erp.git
-cd agency-workspace-erp
-docker compose up -d --build                    # first build takes a few minutes
-
-# optional: load a demo agency with one month of data (all roles)
-docker compose --profile demo up demo-seed
+```
+backend/    Java 21 + Spring Boot 3.3 API, PostgreSQL (row-level security), Flyway migrations
+frontend/   Next.js 14 web app (all roles, client portal, platform console)
+mobile/     Flutter Android app (guards and supervisors)
+deploy/     Database init scripts, Caddy (HTTPS) config
+scripts/    Demo/end-to-end scenario, backup/restore, local start/stop
+docs/       Guides (see table above), screenshots, original PDF specs
+.github/    CI: backend tests + web build; Android APK build and release
+docker-compose.yml        local stack     docker-compose.prod.yml   HTTPS override     .env.example   all settings
 ```
 
-| Open | URL |
-|---|---|
-| Web app (all users) | http://localhost:3000 |
-| API docs (Swagger) | http://localhost:8080/swagger-ui |
-
-**Demo logins** (after the seed step):
-
-| Role | Login | Password |
-|---|---|---|
-| Agency owner | `owner.demo@shield.test` | `Passw0rd!` |
-| Finance | `fin.demo@shield.test` | `Passw0rd!` |
-| Operations | `ops.demo@shield.test` | `Passw0rd!` |
-| Guard (open on a phone) | `8dem333333` | `guard123` |
-| Client portal | `client.demo@phoenix.test` | `Client@123` |
-
-Or click **Create your account** on the login page to register your own agency.
-
-* **From another device** (e.g. a guard's phone on the same Wi-Fi), open `http://<your-computer-IP>:3000`.
-  Only port 3000 is needed, because the web server forwards `/v1/*` to the backend.
-* GPS check-in on phones needs **HTTPS** when not on `localhost`. Put the stack behind a reverse proxy
-  with a certificate (Caddy, Nginx, Cloudflare Tunnel) for real use.
-* **Stop:** `docker compose down` (data is kept). **Reset everything:** `docker compose down -v`.
-* **Before going live:** set `JWT_SECRET` (and `POSTGRES_PASSWORD`) in a `.env` file next to `docker-compose.yml`.
-
-**Who uses what:** there is one app for everyone, and each role gets its own screens (guards and clients get
-phone-friendly views that can be installed to the home screen). See **[docs/USER_GUIDE.md](docs/USER_GUIDE.md)**
-for screenshots and a month-in-the-life walkthrough.
-
-## Local development
+## Tests
 
 ```bash
-# Postgres roles (once): owner runs migrations, app role is subject to RLS
-psql -U postgres -f deploy/postgres-init.sql
-
-cd backend && mvn spring-boot:run          # :8080, migrations run automatically
-cd frontend && npm install && npm run dev  # :3000
+cd backend && mvn test                         # payroll, billing and pay-rate unit tests (golden scenarios)
+python3 scripts/e2e_scenario.py                # full month of business against a running backend (50 checks)
+cd mobile && flutter test                      # app unit/widget tests
+flutter test test/live_backend_test.dart --dart-define=SERVER=http://localhost:8080   # app against demo data
 ```
 
-### Tests
-
-```bash
-cd backend && mvn test                     # golden payroll / billing / rate-resolution unit tests
-python3 scripts/e2e_scenario.py            # full business scenario against a running backend (50 checks)
-```
-
-The end-to-end script runs one realistic month: two agencies, two clients in different states, a
-guard transferred mid-month, a replacement, an uncovered no-show, a client-requested extra shift, a
-contract rate revision, maker-checker approvals, payroll, invoices, a payment and isolation checks.
+The end-to-end script covers two agencies, two clients in different states, a guard transferred mid-month, a
+replacement, an uncovered no-show, a client-requested extra shift, a contract rate revision, maker-checker
+approvals, payroll, invoices, a payment and isolation checks.
 
 ## Rebranding
 
 | What | Where |
 |---|---|
-| Product name, tagline, colour (backend) | `backend/src/main/resources/application.yml` → `app.brand.*` or env `BRAND_NAME`, `BRAND_TAGLINE`, `BRAND_PRIMARY_COLOR`, `BRAND_LOGO_URL` |
-| Product name, tagline, colour (web) | `frontend/src/config/brand.ts` or env `NEXT_PUBLIC_BRAND_NAME`, `NEXT_PUBLIC_BRAND_TAGLINE`, `NEXT_PUBLIC_BRAND_PRIMARY` |
-| Logo / favicon | `frontend/public/brand/logo.svg` |
-| Per-agency white-label | Each agency sets its own logo and colour in **Settings → Branding** |
+| Product name, tagline, colour (server + web) | `.env` → `BRAND_NAME`, `BRAND_TAGLINE`, `BRAND_PRIMARY` (then rebuild) |
+| Web defaults / logo / favicon | `frontend/src/config/brand.ts`, `frontend/public/brand/logo.svg` |
+| Android app name, colour, default server | `mobile/lib/config/brand.dart` (or GitHub Actions variables), launcher label in `mobile/android/app/src/main/res/values/strings.xml`, icons in `mipmap-*` |
+| Each agency's own logo and colour | In the app: **Settings & users → Branding** |
 
-The Java package (`app.erp`) and database names are deliberately brand-neutral.
-
-## Configuration (env)
-
-| Variable | Default | Notes |
-|---|---|---|
-| `DB_URL` | `jdbc:postgresql://localhost:5432/erp` | |
-| `DB_APP_USER` / `DB_APP_PASSWORD` | `erp_app` | runtime role (must **not** own tables, so RLS applies) |
-| `DB_OWNER_USER` / `DB_OWNER_PASSWORD` | `erp_owner` | migrations |
-| `JWT_SECRET` | dev value | **set ≥ 32 random bytes in production** |
-| `ACCESS_TOKEN_MINUTES` | 720 | |
-| `CORS_ORIGINS` | `*` | comma-separated origin patterns (safe default: auth is bearer-token, no cookies) |
-| `SIGNUP_ENABLED` / `TRIAL_DAYS` | true / 30 | |
-| `JOBS_ENABLED` | true | day close, incident escalation, overdue marking, outbox relay |
+The code package (`app.erp`) and database names are deliberately brand-neutral.
 
 ## Roadmap (from the PRD phases, not yet built)
 
-* Flutter guard/supervisor app (the web `/guard` page is a mobile-friendly PWA-style stand-in)
+* Mobile: background GPS patrol tracking, QR/NFC checkpoints, push notifications (Firebase), iOS build, Play Store signing
 * Patrol routes and checkpoints, inventory and uniform ledger, supervisor site-visit checklists
-* MFA, OIDC provider integration, break-glass support access
-* Push/SMS/WhatsApp/e-mail providers (notifications are queued in the `notifications` table)
-* Object storage for documents and selfies (the `object_key` / `selfie_hash` fields are ready)
-* Subscription billing for the platform, statutory return files, accounting exports
-* AI: document extraction with human review, natural-language reports over approved metrics
+* MFA, OIDC single sign-on, break-glass support access
+* SMS / WhatsApp / e-mail / push delivery (notifications are already queued in the `notifications` table)
+* File storage for documents and selfies (`object_key` / `selfie_hash` fields are ready)
+* Platform subscription billing, statutory return files, accounting exports
+* AI: document extraction with human review, natural-language reports
 
-> Legal and payroll rules (PF, ESI, PT, minimum wages, GST) are tenant configuration with illustrative
-> defaults. They must be validated by qualified professionals before production use.
+> Legal and payroll rules (PF, ESI, PT, minimum wages, GST) are agency configuration with illustrative defaults.
+> They must be validated by qualified professionals before production use.

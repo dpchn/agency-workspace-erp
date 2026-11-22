@@ -1,7 +1,10 @@
-# One-command stack:
+# Local / evaluation stack (see docs/DEPLOYMENT.md):
 #   docker compose up -d --build                 -> web http://localhost:3000 , API docs http://localhost:8080/swagger-ui
 #   docker compose --profile demo up demo-seed   -> (optional) loads a demo agency with one month of data
+# Production (HTTPS on your domain):
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 #
+# Settings come from a .env file next to this one (copy .env.example). Defaults are for local use only.
 # Only port 3000 is needed by users: the web server proxies /v1/* to the backend.
 services:
   db:
@@ -9,9 +12,11 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      ERP_OWNER_PASSWORD: ${DB_OWNER_PASSWORD:-erp_owner}
+      ERP_APP_PASSWORD: ${DB_APP_PASSWORD:-erp_app}
     volumes:
       - dbdata:/var/lib/postgresql/data
-      - ./deploy/postgres-init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - ./deploy/postgres-init.sh:/docker-entrypoint-initdb.d/01-init.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d erp"]
       interval: 5s
@@ -26,13 +31,20 @@ services:
     environment:
       DB_URL: jdbc:postgresql://db:5432/erp
       DB_APP_USER: erp_app
-      DB_APP_PASSWORD: erp_app
+      DB_APP_PASSWORD: ${DB_APP_PASSWORD:-erp_app}
       DB_OWNER_USER: erp_owner
-      DB_OWNER_PASSWORD: erp_owner
+      DB_OWNER_PASSWORD: ${DB_OWNER_PASSWORD:-erp_owner}
       JWT_SECRET: ${JWT_SECRET:-dev-only-secret-change-me-please-32-bytes-min}
-      CORS_ORIGINS: "*"   # bearer-token API (no cookies); restrict e.g. https://erp.example.com
+      ACCESS_TOKEN_MINUTES: ${ACCESS_TOKEN_MINUTES:-720}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}   # bearer-token API (no cookies); restrict e.g. https://erp.example.com
+      SIGNUP_ENABLED: ${SIGNUP_ENABLED:-true}
+      TRIAL_DAYS: ${TRIAL_DAYS:-30}
+      JOBS_ENABLED: ${JOBS_ENABLED:-true}
       BRAND_NAME: ${BRAND_NAME:-DutyGrid}
-      TZ: Asia/Kolkata
+      BRAND_TAGLINE: ${BRAND_TAGLINE:-Workforce ERP for security & facility agencies}
+      BRAND_PRIMARY_COLOR: ${BRAND_PRIMARY:-#1d4ed8}
+      BRAND_SUPPORT_EMAIL: ${BRAND_SUPPORT_EMAIL:-support@example.com}
+      TZ: ${TZ:-Asia/Kolkata}
     ports: ["8080:8080"]
 
   frontend:
@@ -41,6 +53,7 @@ services:
       args:
         BACKEND_URL: http://backend:8080
         NEXT_PUBLIC_BRAND_NAME: ${BRAND_NAME:-DutyGrid}
+        NEXT_PUBLIC_BRAND_TAGLINE: ${BRAND_TAGLINE:-Workforce ERP for security & facility agencies}
         NEXT_PUBLIC_BRAND_PRIMARY: ${BRAND_PRIMARY:-#1d4ed8}
     restart: unless-stopped
     depends_on: [backend]

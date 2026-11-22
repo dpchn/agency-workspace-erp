@@ -56,3 +56,8 @@ app:
     trial-days: ${TRIAL_DAYS:30}
   jobs:
     enabled: ${JOBS_ENABLED:true}
+
+logging:
+  pattern:
+    # correlationId matches the one returned in API error responses; tenantId helps per-agency support
+    level: "%5p [cid=%X{correlationId:-} tid=%X{tenantId:-}]"

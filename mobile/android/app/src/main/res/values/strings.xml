@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Name under the launcher icon. Change together with BRAND_NAME (lib/config/brand.dart). -->
+    <string name="app_name">DutyGrid</string>
+</resources>

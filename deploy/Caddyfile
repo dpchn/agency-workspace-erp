@@ -1,0 +1,18 @@
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode gzip
+	# API docs straight from the backend
+	handle /swagger-ui* {
+		reverse_proxy backend:8080
+	}
+	handle /v3/api-docs* {
+		reverse_proxy backend:8080
+	}
+	# everything else (web app + /v1 API proxy) via the Next.js server
+	handle {
+		reverse_proxy frontend:3000
+	}
+}
