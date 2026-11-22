@@ -67,7 +67,10 @@ public class SecurityConfig {
     @Bean
     CorsConfigurationSource corsConfigurationSource(AppProperties props) {
         CorsConfiguration c = new CorsConfiguration();
-        c.setAllowedOrigins(Arrays.stream(props.security().corsOrigins().split(",")).map(String::trim).toList());
+        // Auth is a bearer token (no cookies), so allowing any origin cannot leak credentials.
+        // Default "*" lets the app be opened via any host/IP; restrict with CORS_ORIGINS if desired.
+        c.setAllowedOriginPatterns(Arrays.stream(props.security().corsOrigins().split(",")).map(String::trim).toList());
+        c.setAllowCredentials(false);
         c.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         c.setAllowedHeaders(List.of("*"));
         c.setExposedHeaders(List.of("X-Correlation-Id", "Content-Disposition"));

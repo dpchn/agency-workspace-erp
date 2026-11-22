@@ -6,7 +6,7 @@ and platform operator console (`/platform`). Talks to the Spring Boot backend in
 ## Run
 
 ```bash
-cp .env.example .env.local     # adjust NEXT_PUBLIC_API_URL if the backend is not on :8080
+cp .env.example .env.local     # adjust BACKEND_URL if the backend is not on :8080
 npm install
 npm run dev                    # http://localhost:3000
 # production
@@ -19,7 +19,8 @@ The backend must allow the frontend origin (`CORS_ORIGINS`, default `http://loca
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `NEXT_PUBLIC_API_URL` | `http://localhost:8080` | Backend base URL |
+| `BACKEND_URL` | `http://localhost:8080` | Backend the Next.js server proxies `/v1/*` to (build time). Browser only needs port 3000. |
+| `NEXT_PUBLIC_API_URL` | empty (same origin) | Optional: call the API directly from the browser instead (requires backend `CORS_ORIGINS`) |
 | `NEXT_PUBLIC_BRAND_NAME` | `DutyGrid` | Product name (title, login page, "powered by") |
 | `NEXT_PUBLIC_BRAND_TAGLINE` | `Workforce ERP for security & facility agencies` | Login page tagline |
 | `NEXT_PUBLIC_BRAND_PRIMARY` | `#1d4ed8` | Primary colour (buttons, active nav, highlights) |
@@ -59,7 +60,7 @@ src/
 ## Docker
 
 ```bash
-docker build -t erp-frontend --build-arg NEXT_PUBLIC_API_URL=https://api.example.com \
+docker build -t erp-frontend --build-arg BACKEND_URL=https://api.example.com \
   --build-arg NEXT_PUBLIC_BRAND_NAME="YourBrand" .
 docker run -p 3000:3000 erp-frontend
 ```

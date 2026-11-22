@@ -36,13 +36,46 @@ payroll and invoices always reconcile, however often people move.
 * **frontend/**: Next.js 14 (App Router, TypeScript, Tailwind)
 * **docs/**: domain scenarios, architecture, original specifications (`docs/specs/*.pdf`)
 
-## Quick start (Docker)
+## Quick start (Docker): clone and run
+
+Needs only Docker Desktop (or Docker Engine with the compose plugin).
 
 ```bash
-docker compose up --build
-# Web  http://localhost:3000   (sign up an agency on the login page)
-# API  http://localhost:8080/swagger-ui
+git clone https://github.com/dpchn/agency-workspace-erp.git
+cd agency-workspace-erp
+docker compose up -d --build                    # first build takes a few minutes
+
+# optional: load a demo agency with one month of data (all roles)
+docker compose --profile demo up demo-seed
 ```
+
+| Open | URL |
+|---|---|
+| Web app (all users) | http://localhost:3000 |
+| API docs (Swagger) | http://localhost:8080/swagger-ui |
+
+**Demo logins** (after the seed step):
+
+| Role | Login | Password |
+|---|---|---|
+| Agency owner | `owner.demo@shield.test` | `Passw0rd!` |
+| Finance | `fin.demo@shield.test` | `Passw0rd!` |
+| Operations | `ops.demo@shield.test` | `Passw0rd!` |
+| Guard (open on a phone) | `8dem333333` | `guard123` |
+| Client portal | `client.demo@phoenix.test` | `Client@123` |
+
+Or click **Create your account** on the login page to register your own agency.
+
+* **From another device** (e.g. a guard's phone on the same Wi-Fi), open `http://<your-computer-IP>:3000`.
+  Only port 3000 is needed, because the web server forwards `/v1/*` to the backend.
+* GPS check-in on phones needs **HTTPS** when not on `localhost`. Put the stack behind a reverse proxy
+  with a certificate (Caddy, Nginx, Cloudflare Tunnel) for real use.
+* **Stop:** `docker compose down` (data is kept). **Reset everything:** `docker compose down -v`.
+* **Before going live:** set `JWT_SECRET` (and `POSTGRES_PASSWORD`) in a `.env` file next to `docker-compose.yml`.
+
+**Who uses what:** there is one app for everyone, and each role gets its own screens (guards and clients get
+phone-friendly views that can be installed to the home screen). See **[docs/USER_GUIDE.md](docs/USER_GUIDE.md)**
+for screenshots and a month-in-the-life walkthrough.
 
 ## Local development
 
@@ -58,7 +91,7 @@ cd frontend && npm install && npm run dev  # :3000
 
 ```bash
 cd backend && mvn test                     # golden payroll / billing / rate-resolution unit tests
-python3 scripts/e2e_scenario.py            # full business scenario against a running backend (49 checks)
+python3 scripts/e2e_scenario.py            # full business scenario against a running backend (50 checks)
 ```
 
 The end-to-end script runs one realistic month: two agencies, two clients in different states, a
@@ -85,7 +118,7 @@ The Java package (`app.erp`) and database names are deliberately brand-neutral.
 | `DB_OWNER_USER` / `DB_OWNER_PASSWORD` | `erp_owner` | migrations |
 | `JWT_SECRET` | dev value | **set ≥ 32 random bytes in production** |
 | `ACCESS_TOKEN_MINUTES` | 720 | |
-| `CORS_ORIGINS` | `http://localhost:3000` | comma-separated |
+| `CORS_ORIGINS` | `*` | comma-separated origin patterns (safe default: auth is bearer-token, no cookies) |
 | `SIGNUP_ENABLED` / `TRIAL_DAYS` | true / 30 | |
 | `JOBS_ENABLED` | true | day close, incident escalation, overdue marking, outbox relay |
 

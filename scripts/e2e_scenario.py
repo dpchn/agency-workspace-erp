@@ -27,7 +27,8 @@ from datetime import date, datetime, timedelta, timezone
 
 BASE = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8080"
 IST = timezone(timedelta(hours=5, minutes=30))
-RUN = uuid.uuid4().hex[:6]
+import os
+RUN = os.environ.get("E2E_RUN") or uuid.uuid4().hex[:6]  # E2E_RUN=demo gives stable demo logins
 FAILS = []
 
 
@@ -66,6 +67,26 @@ def step(t):
 def at(d, hh, mm=0):
     return datetime(d.year, d.month, d.day, hh, mm, tzinfo=IST).astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
+
+# ------------------------------------------------------------------ wait for backend
+for _ in range(90):
+    try:
+        urllib.request.urlopen(BASE + "/actuator/health", timeout=3)
+        break
+    except Exception:
+        try:
+            urllib.request.urlopen(BASE + "/v1/public/brand", timeout=3)
+            break
+        except Exception:
+            time.sleep(2)
+
+if os.environ.get("E2E_RUN"):
+    try:
+        call("POST", "/v1/auth/login", {"login": f"owner.{RUN}@shield.test", "password": "Passw0rd!"})
+        print(f"Demo agency '{RUN}' already loaded. Log in as owner.{RUN}@shield.test / Passw0rd!")
+        sys.exit(0)
+    except AssertionError:
+        pass
 
 # ------------------------------------------------------------------ tenants
 step("Agency signup (two independent tenants)")
@@ -351,5 +372,15 @@ check(call("GET", "/v1/employees", token=other)["total"] == 0, "other agency see
 code, _ = call("GET", f"/v1/invoices/{inv1['id']}", token=other, expect=404, raw=True)
 check(code == 404, "other agency cannot read our invoice")
 
+call("POST", "/v1/users", {"fullName": "Phoenix Facility Manager", "email": f"client.{RUN}@phoenix.test", "role": "CLIENT_ADMIN",
+                           "clientId": c1["id"], "password": "Client@123"}, owner)
+print(f"""
+Logins created (password in brackets):
+  Owner       owner.{RUN}@shield.test  (Passw0rd!)
+  Finance     fin.{RUN}@shield.test    (Passw0rd!)
+  Operations  ops.{RUN}@shield.test    (Passw0rd!)
+  Guard G3    8{RUN[:3]}333333           (guard123)   -> phone view /guard
+  Client      client.{RUN}@phoenix.test (Client@123) -> client portal /portal
+""")
 print("\n" + ("ALL CHECKS PASSED" if not FAILS else f"{len(FAILS)} CHECK(S) FAILED:\n  - " + "\n  - ".join(FAILS)))
 sys.exit(1 if FAILS else 0)

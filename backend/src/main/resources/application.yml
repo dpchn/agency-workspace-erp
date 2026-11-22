@@ -50,7 +50,7 @@ app:
   security:
     jwt-secret: ${JWT_SECRET:change-me-change-me-change-me-change-me-32b}
     access-token-minutes: ${ACCESS_TOKEN_MINUTES:720}
-    cors-origins: ${CORS_ORIGINS:http://localhost:3000}
+    cors-origins: ${CORS_ORIGINS:*}
   signup:
     enabled: ${SIGNUP_ENABLED:true}
     trial-days: ${TRIAL_DAYS:30}

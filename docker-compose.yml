@@ -1,21 +1,26 @@
-# One-command local stack:  docker compose up --build
-# Web: http://localhost:3000   API: http://localhost:8080/swagger-ui
+# One-command stack:
+#   docker compose up -d --build                 -> web http://localhost:3000 , API docs http://localhost:8080/swagger-ui
+#   docker compose --profile demo up demo-seed   -> (optional) loads a demo agency with one month of data
+#
+# Only port 3000 is needed by users: the web server proxies /v1/* to the backend.
 services:
   db:
     image: postgres:16
+    restart: unless-stopped
     environment:
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     volumes:
       - dbdata:/var/lib/postgresql/data
       - ./deploy/postgres-init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
-    ports: ["5432:5432"]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d erp"]
       interval: 5s
-      retries: 20
+      retries: 30
+    # ports: ["5433:5432"]   # uncomment to reach the database from your machine
 
   backend:
     build: ./backend
+    restart: unless-stopped
     depends_on:
       db: { condition: service_healthy }
     environment:
@@ -25,18 +30,32 @@ services:
       DB_OWNER_USER: erp_owner
       DB_OWNER_PASSWORD: erp_owner
       JWT_SECRET: ${JWT_SECRET:-dev-only-secret-change-me-please-32-bytes-min}
-      CORS_ORIGINS: http://localhost:3000
+      CORS_ORIGINS: "*"   # bearer-token API (no cookies); restrict e.g. https://erp.example.com
       BRAND_NAME: ${BRAND_NAME:-DutyGrid}
+      TZ: Asia/Kolkata
     ports: ["8080:8080"]
 
   frontend:
     build:
       context: ./frontend
       args:
-        NEXT_PUBLIC_API_URL: http://localhost:8080
+        BACKEND_URL: http://backend:8080
         NEXT_PUBLIC_BRAND_NAME: ${BRAND_NAME:-DutyGrid}
+        NEXT_PUBLIC_BRAND_PRIMARY: ${BRAND_PRIMARY:-#1d4ed8}
+    restart: unless-stopped
     depends_on: [backend]
     ports: ["3000:3000"]
+
+  # Optional demo data: docker compose --profile demo up demo-seed
+  demo-seed:
+    profiles: ["demo"]
+    image: python:3.12-alpine
+    depends_on: [backend]
+    environment:
+      E2E_RUN: demo
+    volumes:
+      - ./scripts:/scripts:ro
+    command: ["python3", "/scripts/e2e_scenario.py", "http://backend:8080"]
 
 volumes:
   dbdata:

@@ -10,7 +10,8 @@ export const brand = {
   logo: process.env.NEXT_PUBLIC_BRAND_LOGO || "/brand/logo.svg",
 };
 
-export const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+// Empty = same origin (requests go through the Next.js /v1 proxy). Set to call the API directly.
+export const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
 
 /** "#1d4ed8" -> "29 78 216" for use in rgb(var(--brand) / alpha). */
 export function hexToRgbTriplet(hex: string): string {
