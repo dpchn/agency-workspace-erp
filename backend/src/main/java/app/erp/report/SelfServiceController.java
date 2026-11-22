@@ -31,7 +31,7 @@ public class SelfServiceController {
         LocalDate t = to == null ? LocalDate.now().plusDays(7) : to;
         return jdbc.queryForList("""
                 select a.id as assignment_id, a.start_at, a.end_at, a.role, a.status, s.duty_date, s.kind,
-                       si.name as site_name, si.address, si.latitude, si.longitude, si.geofence_radius_m, si.geofence_policy,
+                       si.id as site_id, si.name as site_name, si.address, si.latitude, si.longitude, si.geofence_radius_m, si.geofence_policy,
                        p.name as post_name, p.instructions, r.check_in_at, r.check_out_at, r.status as attendance_status
                 from assignments a join shifts s on s.id = a.shift_id join sites si on si.id = s.site_id join posts p on p.id = s.post_id
                 left join attendance_records r on r.assignment_id = a.id

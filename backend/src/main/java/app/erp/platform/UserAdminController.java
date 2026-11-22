@@ -87,7 +87,8 @@ public class UserAdminController {
         return out;
     }
 
-    public record UpdateRequest(Role role, String status, UUID[] branchIds, UUID[] siteIds, Boolean clearScope) {}
+    public record UpdateRequest(Role role, String status, UUID[] branchIds, UUID[] siteIds, Boolean clearScope,
+                                Boolean clearBranchScope, Boolean clearSiteScope) {}
 
     @PatchMapping("/{membershipId}")
     @Transactional
@@ -101,7 +102,8 @@ public class UserAdminController {
             m.setRole(r.role());
         }
         if (r.status() != null) m.setStatus(r.status());
-        if (Boolean.TRUE.equals(r.clearScope())) { m.setBranchIds(null); m.setSiteIds(null); }
+        if (Boolean.TRUE.equals(r.clearScope()) || Boolean.TRUE.equals(r.clearBranchScope())) m.setBranchIds(null);
+        if (Boolean.TRUE.equals(r.clearScope()) || Boolean.TRUE.equals(r.clearSiteScope())) m.setSiteIds(null);
         if (r.branchIds() != null) m.setBranchIds(r.branchIds());
         if (r.siteIds() != null) m.setSiteIds(r.siteIds());
         terminateSessions(m.getUserId());

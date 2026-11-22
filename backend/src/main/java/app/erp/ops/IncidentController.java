@@ -79,7 +79,7 @@ public class IncidentController {
 
     public record Action(String notes, UUID assignTo, Boolean clientVisible) {}
 
-    @PostMapping("/{id}/{action:acknowledge|start|resolve|close|reopen|assign}")
+    @PostMapping("/{id}/{action:acknowledge|start|resolve|close|reopen|assign|visibility}")
     @Idempotent
     @Transactional
     public Incident act(@PathVariable UUID id, @PathVariable String action, @RequestBody(required = false) Action a) {
@@ -115,6 +115,9 @@ public class IncidentController {
             case "assign" -> {
                 if (a == null || a.assignTo() == null) throw ApiException.field("assignTo", "Required");
                 i.setAssignedTo(a.assignTo());
+            }
+            case "visibility" -> {
+                if (a == null || a.clientVisible() == null) throw ApiException.field("clientVisible", "Required");
             }
             default -> throw ApiException.badRequest("Unknown action");
         }

@@ -273,6 +273,7 @@ else:
     print("  SKIP  no duty today for G3 (time-of-day dependent)")
 code, _ = call("GET", "/v1/employees", token=g3_t, expect=403, raw=True)
 check(code == 403, "guard cannot list employees")
+check([x["name"] for x in call("GET", "/v1/sites", token=g3_t)["items"]] == ["Phoenix Mall Kurla"], "guard sees only the site he works at")
 
 # ------------------------------------------------------------------ payroll
 step("Payroll October: per-duty valuation across sites, maker-checker, lock")
