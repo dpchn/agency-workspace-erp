@@ -1,0 +1,58 @@
+server:
+  port: ${PORT:8080}
+  error.include-message: never
+
+spring:
+  application.name: erp-backend
+  jpa:
+    open-in-view: false
+    hibernate.ddl-auto: validate
+    properties:
+      hibernate.jdbc.time_zone: UTC
+      hibernate.order_inserts: true
+      hibernate.jdbc.batch_size: 50
+  datasource:
+    # Runtime role: must NOT own the tables so PostgreSQL row-level security applies.
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/erp}
+    username: ${DB_APP_USER:erp_app}
+    password: ${DB_APP_PASSWORD:erp_app}
+    hikari.maximum-pool-size: ${DB_POOL_SIZE:20}
+  flyway:
+    # Migration role: owns the schema.
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/erp}
+    user: ${DB_OWNER_USER:erp_owner}
+    password: ${DB_OWNER_PASSWORD:erp_owner}
+    placeholders:
+      appRole: ${DB_APP_USER:erp_app}
+  jackson:
+    default-property-inclusion: non_null
+    serialization.write-dates-as-timestamps: false
+
+management:
+  endpoints.web.exposure.include: health,info,metrics
+
+springdoc:
+  api-docs.path: /v3/api-docs
+  swagger-ui.path: /swagger-ui
+
+# ---------------------------------------------------------------------------
+# Product branding (white-label). Change here or via env vars; nothing else
+# in the backend hard-codes the product name. Tenants can override their own
+# logo/colours in Settings -> Branding.
+# ---------------------------------------------------------------------------
+app:
+  brand:
+    name: ${BRAND_NAME:DutyGrid}
+    tagline: ${BRAND_TAGLINE:Workforce ERP for security & facility agencies}
+    support-email: ${BRAND_SUPPORT_EMAIL:support@example.com}
+    primary-color: ${BRAND_PRIMARY_COLOR:#1d4ed8}
+    logo-url: ${BRAND_LOGO_URL:/brand/logo.svg}
+  security:
+    jwt-secret: ${JWT_SECRET:change-me-change-me-change-me-change-me-32b}
+    access-token-minutes: ${ACCESS_TOKEN_MINUTES:720}
+    cors-origins: ${CORS_ORIGINS:http://localhost:3000}
+  signup:
+    enabled: ${SIGNUP_ENABLED:true}
+    trial-days: ${TRIAL_DAYS:30}
+  jobs:
+    enabled: ${JOBS_ENABLED:true}

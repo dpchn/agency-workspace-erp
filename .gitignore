@@ -1,0 +1,14 @@
+# build
+backend/target/
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+# env / secrets
+.env
+.env.local
+*.local
+# ide / os
+.idea/
+.vscode/
+*.iml
+.DS_Store
