@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Users, Building2, MapPin, FileText, Wallet, CalendarDays, ClipboardCheck, Plane, Banknote,
-  Receipt, ShieldAlert, BarChart3, Settings, Truck, IndianRupee, Layers, Smartphone,
+  Receipt, ShieldAlert, BarChart3, Settings, Truck, IndianRupee, Layers, Smartphone, Tablet,
   type LucideIcon,
 } from "lucide-react";
 import type { Me } from "@/lib/session";
@@ -18,6 +18,7 @@ export const NAV: { section: string; items: NavItem[] }[] = [
       { href: "/leaves", label: "Leaves", icon: Plane, perm: "LEAVE_APPROVE" },
       { href: "/incidents", label: "Incidents", icon: ShieldAlert, perm: "INCIDENT_READ" },
       { href: "/guard", label: "My duty (mobile)", icon: Smartphone, perm: "ATTENDANCE_SELF" },
+      { href: "/kiosk", label: "Site kiosk", icon: Tablet, perm: "ATTENDANCE_KIOSK" },
     ],
   },
   {
@@ -56,6 +57,7 @@ export function allowed(item: NavItem, perms: string[]) {
 
 export function homeFor(me: Me): string {
   if (me.role === "GUARD") return "/guard";
+  if (me.role === "SITE_KIOSK") return "/kiosk";
   if (me.role === "CLIENT_ADMIN" || me.role === "CLIENT_VIEWER") return "/portal";
   if (!me.tenant && me.platformAdmin) return "/platform";
   const perms = me.permissions ?? [];

@@ -77,6 +77,7 @@ public class BillingService {
         }
         invoices.flush();
         if (supplementary) warnings.add("Invoice already issued for this period: generating a supplementary invoice for late-approved duties only");
+        warnings.addAll(signoffWarnings(clientId, ms));
 
         Tenant tenant = tenantService.current();
         Invoice inv = new Invoice();
@@ -97,6 +98,9 @@ public class BillingService {
 
         BigDecimal gstRate = null;
         BigDecimal subtotal = BigDecimal.ZERO;
+        Map<UUID, Integer> pendingBySite = new LinkedHashMap<>();
+        if (!me.isBefore(LocalDate.now(tenantService.zone())))
+            warnings.add("The month has not ended: days not yet worked count as uncovered duties. Generate after " + me + " for the final invoice");
         for (Contract c : contracts.findAll((r, q, cb) -> cb.and(cb.equal(r.get("clientId"), clientId), r.get("status").in("ACTIVE", "SUSPENDED", "TERMINATED", "EXPIRED")))) {
             if (inv.getContractId() == null) inv.setContractId(c.getId());
             for (ContractVersion v : versions.findAll((r, q, cb) -> cb.and(cb.equal(r.get("contractId"), c.getId()), cb.equal(r.get("status"), "APPROVED")), Sort.by("effectiveFrom"))) {
@@ -121,7 +125,7 @@ public class BillingService {
                             select count(*) from attendance_records where client_id = ? and site_id = ? and service_type_id = ?
                               and duty_date between ? and ? and approval_status = 'PENDING'""", Integer.class,
                             clientId, rate.getSiteId(), rate.getServiceTypeId(), from, to);
-                    if (pending != null && pending > 0) warnings.add(pending + " pending attendance record(s) at " + siteNames.get(rate.getSiteId()) + " not billed");
+                    if (pending != null && pending > 0) pendingBySite.merge(rate.getSiteId(), pending, Integer::sum);
                     String label = (rate.getDescription() != null ? rate.getDescription() : serviceNames.getOrDefault(rate.getServiceTypeId(), "Service"))
                             + " @ " + siteNames.getOrDefault(rate.getSiteId(), "site");
                     var out = InvoiceEngine.bill(new InvoiceEngine.Input(rate, label, from, to, month, expected, duties,
@@ -146,6 +150,7 @@ public class BillingService {
                 }
             }
         }
+        pendingBySite.forEach((site, n) -> warnings.add(n + " pending attendance record(s) at " + siteNames.get(site) + " not billed"));
         if (subtotal.signum() == 0 && lines.findAll((r, q, cb) -> cb.equal(r.get("invoiceId"), inv.getId())).isEmpty())
             warnings.add("Nothing to bill: no approved contract version or no billable duties in this period");
         TenantSettings st = tenantService.settings();
@@ -238,9 +243,32 @@ public class BillingService {
         return inv;
     }
 
+    /** Client sign-off of attendance per site for the month: disputes and missing confirmations. */
+    List<String> signoffWarnings(UUID clientId, LocalDate month) {
+        List<String> out = new ArrayList<>();
+        jdbc.query("""
+                select si.name, so.status, so.resolved_at is not null as resolved
+                from sites si left join attendance_signoffs so on so.site_id = si.id and so.period_month = ?
+                where si.client_id = ? and exists (select 1 from attendance_records r where r.site_id = si.id
+                      and r.duty_date between ? and ?)
+                order by si.name""", rs -> {
+            String st = rs.getString(2);
+            if (st == null) out.add("Client has not confirmed attendance for " + rs.getString(1));
+            else if ("DISPUTED".equals(st) && !rs.getBoolean(3)) out.add("Client DISPUTED attendance for " + rs.getString(1) + "; resolve before issuing");
+        }, month, clientId, month, month.withDayOfMonth(month.lengthOfMonth()));
+        return out;
+    }
+
     private void issue(Invoice inv) {
         Tenant t = tenantService.current();
         TenantSettings st = tenantService.settings();
+        if ("INVOICE".equals(inv.getKind()) && st.bool("blockInvoiceOnDispute")) {
+            Long open = jdbc.queryForObject("""
+                    select count(*) from attendance_signoffs where client_id = ? and period_month = ?
+                      and status = 'DISPUTED' and resolved_at is null""", Long.class, inv.getClientId(), inv.getPeriodStart().withDayOfMonth(1));
+            if (open != null && open > 0)
+                throw ApiException.invalidState("The client disputed this month's attendance. Resolve the dispute (Attendance → Client sign-off) before issuing");
+        }
         LocalDate today = LocalDate.now(tenantService.zone());
         int fyStart = t.getFiscalYearStartMonth() == null ? 4 : t.getFiscalYearStartMonth();
         int fy = today.getMonthValue() >= fyStart ? today.getYear() : today.getYear() - 1;

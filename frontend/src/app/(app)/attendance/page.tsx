@@ -9,14 +9,25 @@ import { Form } from "@/components/Form";
 import { useToast } from "@/components/Toast";
 import { opts, useSites } from "@/lib/lookups";
 import { addDays, fmtDateTime, fmtTime, thisMonth, today } from "@/lib/format";
+import { AuthImage, SourceBadges } from "@/components/AuthImage";
+import { RegisterEntry, RollCall, SignOffs } from "./team";
 
 export default function AttendancePage() {
+  const { can } = useSession();
   const [tab, setTab] = useState("records");
   return (
     <div>
-      <Tabs active={tab} onChange={setTab} tabs={[{ key: "records", label: "Records & approval" }, { key: "adj", label: "Adjustments" }, { key: "muster", label: "Muster roll" }]} />
+      <Tabs active={tab} onChange={setTab} tabs={[
+        { key: "records", label: "Records & approval" },
+        ...(can("ATTENDANCE_MARK") ? [{ key: "roll", label: "Team roll-call" }] : []),
+        ...(can("ATTENDANCE_ADJUST") ? [{ key: "register", label: "Register entry" }] : []),
+        { key: "adj", label: "Corrections" }, { key: "signoff", label: "Client sign-off" }, { key: "muster", label: "Muster roll" },
+      ]} />
       {tab === "records" && <Records />}
+      {tab === "roll" && <RollCall />}
+      {tab === "register" && <RegisterEntry />}
       {tab === "adj" && <Adjustments />}
+      {tab === "signoff" && <SignOffs />}
       {tab === "muster" && <Muster />}
     </div>
   );
@@ -34,7 +45,7 @@ function Records() {
   const decide = async (decision: string) => {
     const r = await api.post("/v1/attendance/approvals", { recordIds: [...sel], decision }, { idem: true });
     toast.ok(`${r.updated} record(s) ${decision.toLowerCase()}`);
-    if (r.skipped?.length) toast.err(`${r.skipped.length} skipped: ${r.skipped[0]}`);
+    if (r.skipped?.length) toast.err(`${r.skipped.length} skipped: ${r.skipped.map((x: string) => x.replace(/^[0-9a-f-]{36}: /, "")).filter((x: string, i: number, a: string[]) => a.indexOf(x) === i).join("; ")}`);
     setSel(new Set());
     reload();
   };
@@ -79,6 +90,7 @@ function Records() {
             { key: "status", label: "Status", render: (r) => <Badge value={r.status} /> },
             { key: "units", label: "Pay / bill", render: (r) => `${r.pay_units} / ${r.bill_units}` },
             { key: "role", label: "Role", render: (r) => <>{r.assignment_role !== "REGULAR" && <Badge value={r.assignment_role} />} {r.shift_kind === "EXTRA" && <Badge value="EXTRA" />}</> },
+            { key: "sources", label: "Marked by", render: (r) => <SourceBadges sources={r.sources} /> },
             { key: "flags", label: "Flags", render: (r) => <div className="flex flex-wrap gap-1">{(r.flags ?? []).map((x: string) => <Badge key={x} value={x} />)}</div> },
             { key: "approval_status", label: "Approval", render: (r) => <>{<Badge value={r.approval_status} />}{(r.payroll_locked || r.invoice_locked) && <span className="ml-1 text-xs text-slate-400">locked</span>}</> },
             { key: "a", label: "", render: (r) => can("ATTENDANCE_ADJUST") && !r.payroll_locked && !r.invoice_locked && <button className="btn-ghost" onClick={(e) => { e.stopPropagation(); setAdj(r); }}>Adjust</button> },
@@ -102,25 +114,48 @@ function Records() {
   );
 }
 
+/** beforeState stores missing times as the string "null". */
+const nn = (v: unknown) => (v === "null" ? null : v);
+
 function Adjustments() {
   const { can } = useSession();
+  const toast = useToast();
   const [status, setStatus] = useState("PENDING");
-  const { data, loading, reload } = useApi<any[]>(`/v1/attendance/adjustments?status=${status}`);
+  const { data, loading, error, reload } = useApi<any[]>(`/v1/attendance/adjustments?status=${status}`);
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const decideMany = async (approve: boolean) => {
+    const r = await api.post("/v1/attendance/adjustments/decisions", { ids: [...sel], approve }, { idem: true });
+    toast.ok(`${r.updated} correction(s) ${approve ? "approved" : "rejected"}`);
+    if (r.skipped?.length) toast.err(`${r.skipped.length} skipped: ${r.skipped.map((x: string) => x.replace(/^[0-9a-f-]{36}: /, "")).filter((x: string, i: number, a: string[]) => a.indexOf(x) === i).join("; ")}`);
+    setSel(new Set());
+    reload();
+  };
+  const canDecide = status === "PENDING" && can("ATTENDANCE_APPROVE");
   return (
     <div>
-      <PageHeader title="Attendance adjustments" subtitle="Maker-checker: the requester cannot approve their own correction."
-        actions={<select className="input w-auto" value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Status">
-          {["PENDING", "APPROVED", "REJECTED"].map((s) => <option key={s}>{s}</option>)}</select>} />
+      <PageHeader title="Attendance corrections" subtitle="Adjustments and paper-register entries. Maker-checker: the requester cannot approve their own correction."
+        actions={<>
+          {canDecide && sel.size > 0 && <>
+            <span className="self-center text-sm text-slate-500">{sel.size} selected</span>
+            <ActionButton className="btn-primary" onClick={() => decideMany(true)}>Approve</ActionButton>
+            <ActionButton className="btn-danger" onClick={() => decideMany(false)}>Reject</ActionButton>
+          </>}
+          <select className="input w-auto" value={status} onChange={(e) => { setStatus(e.target.value); setSel(new Set()); }} aria-label="Status">
+            {["PENDING", "APPROVED", "REJECTED"].map((s) => <option key={s}>{s}</option>)}</select>
+        </>} />
+      {error && <ErrorBox error={error} />}
       <div className="card p-0">
-        {loading ? <Loading /> : (
-          <DataTable rows={data ?? []} empty="No adjustments." columns={[
-            { key: "createdAt", label: "Requested", render: (r) => fmtDateTime(r.createdAt) },
-            { key: "before", label: "Before", render: (r) => <span className="text-xs">{r.beforeState ? `${fmtTime(r.beforeState.checkInAt)}–${fmtTime(r.beforeState.checkOutAt)} ${r.beforeState.status}` : "-"}</span> },
-            { key: "after", label: "Proposed", render: (r) => <span className="text-xs">{fmtTime(r.proposedCheckInAt)}–{fmtTime(r.proposedCheckOutAt)} {r.proposedStatus ?? ""}</span> },
-            { key: "reason", label: "Reason" }, { key: "evidenceKey", label: "Evidence" },
+        {loading && !data ? <Loading /> : (
+          <DataTable rows={data ?? []} selectable={canDecide} selected={sel} onSelect={setSel} empty="No corrections." columns={[
+            { key: "who", label: "Employee / duty", render: (r) => <><div>{r.employeeCode} <span className="text-slate-500">{r.employeeName}</span></div><div className="text-xs text-slate-500">{r.dutyDate} · {r.siteName}</div></> },
+            { key: "before", label: "Before", render: (r) => <span className="text-xs">{r.beforeState ? `${fmtTime(nn(r.beforeState.checkInAt))}–${fmtTime(nn(r.beforeState.checkOutAt))} ${r.beforeState.status}` : "-"}</span> },
+            { key: "after", label: "Proposed", render: (r) => <span className="text-xs">{fmtTime(r.proposedCheckInAt)}–{fmtTime(r.proposedCheckOutAt)} {r.proposedStatus ? <Badge value={r.proposedStatus} /> : ""}</span> },
+            { key: "reason", label: "Reason", render: (r) => <><div className="max-w-xs text-xs">{r.reason}</div>{r.batchId && <span className="text-[10px] text-violet-700">register batch</span>}</> },
+            { key: "evidence", label: "Evidence", render: (r) => r.photoId ? <AuthImage id={r.photoId} className="h-10 w-10" alt="Evidence" /> : <span className="text-xs">{r.evidenceKey ?? "-"}</span> },
+            { key: "requested", label: "Requested", render: (r) => <span className="text-xs">{r.requestedByName ?? "-"}<br />{fmtDateTime(r.createdAt)}</span> },
             { key: "status", label: "Status", render: (r) => <Badge value={r.status} /> },
             {
-              key: "a", label: "", render: (r) => r.status === "PENDING" && can("ATTENDANCE_APPROVE") && (
+              key: "a", label: "", render: (r) => canDecide && r.status === "PENDING" && (
                 <div className="flex gap-1">
                   <ActionButton className="btn-primary" success="Approved" onClick={async () => { await api.post(`/v1/attendance/adjustments/${r.id}/decision`, { approve: true }, { idem: true }); reload(); }}>Approve</ActionButton>
                   <ActionButton success="Rejected" onClick={async () => { await api.post(`/v1/attendance/adjustments/${r.id}/decision`, { approve: false }, { idem: true }); reload(); }}>Reject</ActionButton>

@@ -35,6 +35,19 @@ public class Tenant extends BaseEntity {
     private Map<String, Object> branding = new HashMap<>();
     @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     private Integer maxEmployees;
+    private Integer maxSites;
+    private Integer maxUsers;
+    private String contactName;
+    private String contactEmail;
+    private String contactPhone;
+    private String platformNotes;
+    private String statusReason;
+    private java.util.UUID onboardedBy;
     @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     private Instant trialEndsAt;
+
+    /** A trial past its end date: sign-in is refused until the platform operator activates or extends it. */
+    public boolean trialExpired() {
+        return "TRIAL".equals(status) && trialEndsAt != null && trialEndsAt.isBefore(Instant.now());
+    }
 }

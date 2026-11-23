@@ -56,6 +56,9 @@ app:
     trial-days: ${TRIAL_DAYS:30}
   jobs:
     enabled: ${JOBS_ENABLED:true}
+  platform:
+    admin-email: ${PLATFORM_ADMIN_EMAIL:}
+    admin-password: ${PLATFORM_ADMIN_PASSWORD:}
 
 logging:
   pattern:

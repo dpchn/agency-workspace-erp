@@ -10,7 +10,8 @@ import { useToast } from "@/components/Toast";
 import { applyBrandColor, brand } from "@/config/brand";
 import { opts, useBranches, useClients, useEmployees, useSites } from "@/lib/lookups";
 
-const ROLES = ["OWNER", "HR", "OPERATIONS", "SUPERVISOR", "FINANCE", "CLIENT_ADMIN", "CLIENT_VIEWER", "GUARD", "AUDITOR"];
+const ROLES = ["OWNER", "HR", "OPERATIONS", "SUPERVISOR", "FINANCE", "CLIENT_ADMIN", "CLIENT_VIEWER", "GUARD", "SITE_KIOSK", "AUDITOR"];
+const ROLE_OPTIONS = ROLES.map((r) => ({ value: r, label: r === "SITE_KIOSK" ? "Site device (kiosk)" : r.replace(/_/g, " ") }));
 
 /** Human labels for tenant business policies (keys come from the backend's TenantSettings). */
 const POLICY_HELP: Record<string, string> = {
@@ -24,6 +25,12 @@ const POLICY_HELP: Record<string, string> = {
   fullDayMinPercent: "Worked % of shift needed for a full duty",
   halfDayMinPercent: "Worked % of shift needed for a half duty",
   autoApproveCleanAttendance: "Auto-approve completed duties with no flags",
+  autoApproveSources: "Ways of marking that may auto-approve (comma-separated: MOBILE, KIOSK, SUPERVISOR, MANUAL). Others always need a second person",
+  kioskPhotoRequired: "Site kiosk takes a photo with every punch",
+  rollCallPhotoRequired: "Supervisor roll-call needs a photo of the team",
+  pinMaxAttempts: "Wrong kiosk PIN attempts before the PIN locks",
+  pinLockMinutes: "How long a kiosk PIN stays locked",
+  blockInvoiceOnDispute: "A client's unresolved attendance dispute blocks issuing that month's invoice",
   checkInWindowMinutes: "How early/late a check-in can match a shift",
   lateSubmissionHours: "Offline sync older than this is flagged",
   maxAccuracyMeters: "GPS accuracy worse than this is flagged",
@@ -45,8 +52,9 @@ export default function SettingsPage() {
       <Tabs active={tab} onChange={setTab} tabs={[
         ...(can("SETTINGS_WRITE") ? [{ key: "org", label: "Organisation" }, { key: "policy", label: "Business policies" }, { key: "brand", label: "Branding" }] : []),
         ...(can("USER_MANAGE") ? [{ key: "users", label: "Users & roles" }] : []),
+        { key: "plan", label: "Plan & usage" },
       ]} />
-      {tab === "users" ? <Users /> : <OrgSettings tab={tab} />}
+      {tab === "users" ? <Users /> : tab === "plan" ? <PlanUsage /> : <OrgSettings tab={tab} />}
     </div>
   );
 }
@@ -62,7 +70,7 @@ function OrgSettings({ tab }: { tab: string }) {
   if (tab === "org") return (
     <div className="card max-w-2xl">
       <PageHeader title="Organisation" subtitle={`Workspace: ${data.slug} · ${data.status} · plan ${data.plan}`} />
-      <Form initial={data} fields={[
+      <Form key="org" initial={data} fields={[
         { name: "name", label: "Display name", required: true, half: true }, { name: "legalName", label: "Legal name", half: true },
         { name: "gstin", label: "GSTIN", half: true }, { name: "stateCode", label: "State code (supplier state for GST)", half: true },
         { name: "timezone", label: "Timezone", half: true },
@@ -83,7 +91,8 @@ function OrgSettings({ tab }: { tab: string }) {
     return (
       <div className="card">
         <PageHeader title="Business policies" subtitle="Rules that differ between agencies. Legal/payroll values must be validated by a qualified professional." />
-        <Form initial={initial} fields={fields} onSubmit={async (v) => {
+        {/* keyed per tab: without it React reuses the previous tab's form state and the policies show blank */}
+        <Form key="policy" initial={initial} fields={fields} onSubmit={async (v) => {
           const out: Record<string, any> = {};
           Object.entries(v).forEach(([k, val]) => { out[k] = Array.isArray(s[k]) ? String(val ?? "").split(",").map((x) => x.trim()).filter(Boolean) : val; });
           await save({ settings: out });
@@ -96,7 +105,7 @@ function OrgSettings({ tab }: { tab: string }) {
   return (
     <div className="card max-w-2xl">
       <PageHeader title="Branding" subtitle={`Shown to your staff, guards and clients instead of ${brand.name}.`} />
-      <Form initial={{ displayName: b.displayName, primaryColor: b.primaryColor ?? brand.primary, logoUrl: b.logoUrl }} fields={[
+      <Form key="brand" initial={{ displayName: b.displayName, primaryColor: b.primaryColor ?? brand.primary, logoUrl: b.logoUrl }} fields={[
         { name: "displayName", label: "Name shown in the app (blank = organisation name)" },
         { name: "primaryColor", label: "Primary colour (hex)", half: true, placeholder: "#1d4ed8" },
         { name: "logoUrl", label: "Logo URL (square SVG/PNG)", half: true },
@@ -118,7 +127,7 @@ function Users() {
   const [created, setCreated] = useState<string | null>(null);
   return (
     <div>
-      <PageHeader title="Users & roles" subtitle="Access is explicit per organisation; never inferred from e-mail domain. Scope supervisors to sites/branches."
+      <PageHeader title="Users & roles" subtitle="Access is explicit per organisation; never inferred from e-mail domain. Scope supervisors to sites/branches. A site device (kiosk) is a shared gate tablet where workers without a phone punch with code + PIN; open /kiosk on it."
         actions={<button className="btn-primary" onClick={() => setInvite(true)}>Add user</button>} />
       <div className="card p-0">
         {loading ? <Loading /> : (
@@ -129,8 +138,17 @@ function Users() {
               r.clientId && "Client: " + (clients.map[r.clientId] ?? ""), r.employeeId && "Employee: " + (emps.map[r.employeeId] ?? "")].filter(Boolean).join(" · ") || "All" },
             { key: "status", label: "Status", render: (r) => <Badge value={r.status} /> },
             {
-              key: "a", label: "", render: (r) => <ActionButton className="btn-ghost" success="Sessions terminated" confirm="Sign this user out of all devices?"
-                onClick={() => api.post(`/v1/users/${r.membershipId}/terminate-sessions`)}>Sign out everywhere</ActionButton>,
+              key: "a", label: "", render: (r) => (
+                <div className="flex gap-1">
+                  <ActionButton className="btn-ghost" success="Sessions terminated" confirm="Sign this user out of all devices?"
+                    onClick={() => api.post(`/v1/users/${r.membershipId}/terminate-sessions`)}>Sign out everywhere</ActionButton>
+                  <ActionButton className="btn-ghost" confirm={`Reset ${r.name}'s password? They are signed out everywhere and get a temporary password.`}
+                    onClick={async () => {
+                      const x = await api.post(`/v1/users/${r.membershipId}/reset-password`);
+                      alert(`New temporary password for ${x.login}:\n\n${x.temporaryPassword}\n\nShown only once. Ask them to change it after signing in.`);
+                    }}>Reset password</ActionButton>
+                </div>
+              ),
             },
           ]} />
         )}
@@ -139,10 +157,10 @@ function Users() {
         <Form initial={{ role: "SUPERVISOR" }} fields={[
           { name: "fullName", label: "Full name", required: true },
           { name: "email", label: "E-mail", type: "email", half: true }, { name: "phone", label: "or mobile", half: true },
-          { name: "role", label: "Role", type: "select", options: opts(...ROLES), required: true, half: true },
+          { name: "role", label: "Role", type: "select", options: ROLE_OPTIONS, required: true, half: true },
           { name: "password", label: "Initial password (blank = generate)", type: "password", half: true },
           { name: "branchIds", label: "Limit to branches (none = all)", type: "multiselect", options: branches.options },
-          { name: "siteIds", label: "Limit to sites (supervisors)", type: "multiselect", options: sites.options },
+          { name: "siteIds", label: "Limit to sites (supervisors; required for a site device)", type: "multiselect", options: sites.options },
           { name: "clientId", label: "Client (client portal roles)", type: "select", options: clients.options, half: true },
           { name: "employeeId", label: "Employee (guard role)", type: "select", options: emps.options, half: true },
         ]} onCancel={() => setInvite(false)}
@@ -160,7 +178,7 @@ function Users() {
       <Modal open={!!edit} title={edit ? `Edit ${edit.name}` : ""} onClose={() => setEdit(null)}>
         {edit && (
           <Form initial={edit} fields={[
-            { name: "role", label: "Role", type: "select", options: opts(...ROLES), half: true },
+            { name: "role", label: "Role", type: "select", options: ROLE_OPTIONS, half: true },
             { name: "status", label: "Status", type: "select", options: opts("ACTIVE", "INACTIVE"), half: true },
             { name: "branchIds", label: "Branches (none = all)", type: "multiselect", options: branches.options },
             { name: "siteIds", label: "Sites (none = all)", type: "multiselect", options: sites.options },
@@ -175,6 +193,36 @@ function Users() {
             }} />
         )}
       </Modal>
+    </div>
+  );
+}
+
+/** The agency's subscription: plan, limits vs usage, trial end. Changed by the platform operator. */
+function PlanUsage() {
+  const { data } = useApi<any>("/v1/settings/plan");
+  if (!data) return <Loading />;
+  const row = (label: string, used: number, limit: any) => {
+    const unlimited = limit === "UNLIMITED";
+    const pct = unlimited ? 0 : Math.min(100, Math.round((used * 100) / Math.max(1, limit)));
+    return (
+      <div key={label}>
+        <div className="flex justify-between text-sm"><span>{label}</span><span>{used} / {unlimited ? "unlimited" : limit}</span></div>
+        {!unlimited && <div className="mt-1 h-2 rounded bg-slate-100"><div className={`h-2 rounded ${pct >= 90 ? "bg-red-500" : "bg-blue-600"}`} style={{ width: `${pct}%` }} /></div>}
+      </div>
+    );
+  };
+  return (
+    <div className="card max-w-xl space-y-4">
+      <div className="flex items-center justify-between">
+        <div><div className="text-lg font-semibold">{data.planName} plan</div>
+          {data.status === "TRIAL" && data.trialEndsAt && <div className="text-sm text-amber-700">Free trial until {String(data.trialEndsAt).slice(0, 10)}</div>}
+        </div>
+        <Badge value={data.status} />
+      </div>
+      {row("Staff (employees)", data.usage.employees, data.limits.employees)}
+      {row("Active sites", data.usage.sites, data.limits.sites)}
+      {row("Office users", data.usage.users, data.limits.users)}
+      <p className="text-xs text-slate-500">Guard app logins and client logins are not limited. To change your plan, contact your provider.</p>
     </div>
   );
 }

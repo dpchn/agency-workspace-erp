@@ -13,6 +13,9 @@ Story (October 2026, agency "Shield Force"):
   * 12 Oct night: G2 no-show, nobody covers -> marked ABSENT, client 1 invoice gets a deduction line.
   * 20 Oct: client 1 asks for an EXTRA shift -> billed as additional shift.
   * Maker-checker on contracts, attendance adjustments, payroll and invoices.
+  * November: workers without a phone. G1 punches on the Site B gate kiosk with code + PIN + photo; a supervisor
+    marks Site A by team roll-call (photo); the office enters a paper register page; proxy-marked duties need a
+    second person to approve. The client disputes Site A's attendance, which blocks the invoice until resolved.
   * A second agency cannot see any of it.
 
 Usage: python3 scripts/e2e_scenario.py [base_url]
@@ -42,7 +45,7 @@ def call(method, path, body=None, token=None, idem=False, expect=None, raw=False
         req.add_header("Idempotency-Key", idem if isinstance(idem, str) else str(uuid.uuid4()))
     try:
         with urllib.request.urlopen(req) as r:
-            status, text = r.status, r.read().decode()
+            status, text = r.status, r.read().decode(errors="replace")
     except urllib.error.HTTPError as e:
         status, text = e.code, e.read().decode()
     if expect is not None and status != expect:
@@ -281,17 +284,24 @@ call("POST", "/v1/roster/generate", {"from": date.today().isoformat(), "to": dat
 call("POST", f"/v1/employees/{G['G3']}/create-login", {"phone": f"8{RUN[:3]}333333"[:10], "password": "guard123"}, owner)
 g3_t = call("POST", "/v1/auth/login", {"login": f"8{RUN[:3]}333333"[:10], "password": "guard123"})["accessToken"]
 duties = call("GET", "/v1/me/duties", token=g3_t)
-now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-today_duty = [d for d in duties if str(d["duty_date"]) == date.today().isoformat()]
+now_dt = datetime.now(timezone.utc)
+now = now_dt.isoformat().replace("+00:00", "Z")
+
+
+def ts(v):
+    return datetime.fromisoformat(str(v).replace("Z", "+00:00").replace(" ", "T"))
+
+
+today_duty = [d for d in duties if ts(d["start_at"]) - timedelta(hours=2) <= now_dt <= ts(d["end_at"])]
 if today_duty:
     far = call("POST", "/v1/attendance/events", {"clientEventId": str(uuid.uuid4()), "kind": "CHECK_IN", "occurredAt": now,
                                                  "latitude": 19.20, "longitude": 72.95, "accuracyM": 10, "deviceId": "G3-PHONE"}, g3_t, idem=True)
     check(far["status"] == "REJECTED" and "OUTSIDE_GEOFENCE" in far["flags"], "check-in 14 km away rejected at ENFORCE site")
     near = call("POST", "/v1/attendance/events", {"clientEventId": str(uuid.uuid4()), "kind": "CHECK_IN", "occurredAt": now,
                                                   "latitude": 19.0865, "longitude": 72.8890, "accuracyM": 10, "deviceId": "G3-PHONE"}, g3_t, idem=True)
-    check(near["status"] in ("ACCEPTED", "FLAGGED") and near["recordId"], f"check-in at the gate accepted ({near['status']} {near['flags']})")
+    check(near["status"] in ("ACCEPTED", "FLAGGED") and near.get("recordId"), f"check-in at the gate accepted ({near['status']} {near['flags']})")
 else:
-    print("  SKIP  no duty today for G3 (time-of-day dependent)")
+    print("  SKIP  G3 has no duty in progress right now (time-of-day dependent)")
 code, _ = call("GET", "/v1/employees", token=g3_t, expect=403, raw=True)
 check(code == 403, "guard cannot list employees")
 check([x["name"] for x in call("GET", "/v1/sites", token=g3_t)["items"]] == ["Phoenix Mall Kurla"], "guard sees only the site he works at")
@@ -342,6 +352,8 @@ for i in (inv1, inv2):
     call("POST", f"/v1/invoices/{i['id']}/approve", {}, owner, idem=True)
     issued = call("POST", f"/v1/invoices/{i['id']}/issue", {}, owner, idem=True)
     check(issued["invoiceNo"].startswith("INV/"), f"issued {issued['invoiceNo']}")
+    pc, html = call("GET", f"/v1/invoices/{i['id']}/print", token=owner, raw=True)
+    check(pc == 200 and issued["invoiceNo"] in html, "printable tax invoice renders")
 again = call("POST", "/v1/invoices/generate", {"clientId": c2["id"], "month": "2026-10"}, fin_t, idem=True)
 check(float(again["invoice"]["total"]) == 0, "re-generation after issue bills nothing twice (supplementary empty)")
 call("POST", f"/v1/invoices/{again['invoice']['id']}/cancel", {}, fin_t, idem=True)
@@ -364,6 +376,145 @@ check(len(tr) == 2, "G1 deployment trail shows two sites")
 dash = call("GET", "/v1/reports/dashboard?date=2026-10-12", token=owner)
 check(dash["attendance"]["absent"] == 1, "dashboard shows the 12 Oct absence")
 
+# ------------------------------------------------------------------ workers without a phone
+step("Workers without a phone: kiosk PIN, supervisor roll-call, paper register, maker-checker")
+JPEG = "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q=="
+call("PATCH", f"/v1/employees/{G['G1']}", {"hasSmartphone": False}, owner)
+check(call("GET", f"/v1/employees/{G['G1']}", token=owner)["hasSmartphone"] is False, "G1 marked as having no smartphone")
+gen_nov = call("POST", "/v1/roster/generate", {"from": "2026-11-01", "to": "2026-11-05"}, ops_t)
+check(gen_nov["shiftsCreated"] == 15 and gen_nov["openSlots"] == 0, f"November roster: 15 duties ({gen_nov})")
+d12 = [v["shift"] for v in call("GET", "/v1/roster?from=2026-11-02&to=2026-11-02", token=ops_t) if v["shift"]["siteId"] == siteB["id"]][0]
+check(d12["startAt"] == at(date(2026, 11, 2), 8, 0), f"day shift starts 08:00 site time whatever the server time zone ({d12['startAt']})")
+
+code, _ = call("POST", f"/v1/employees/{G['G1']}/kiosk-pin", {"pin": "1111"}, ops_t, expect=400, raw=True)
+check(code == 400, "easy-to-guess PIN refused")
+call("POST", f"/v1/employees/{G['G1']}/kiosk-pin", {"pin": "4826"}, ops_t)
+call("POST", f"/v1/employees/{G['G3']}/kiosk-pin", {"pin": "7391"}, ops_t)
+check(call("GET", f"/v1/employees/{G['G1']}", token=owner)["kioskPinSet"] is True, "kiosk PIN set for G1")
+
+code, _ = call("POST", "/v1/users", {"fullName": "Gate tablet", "email": f"kiosk.{RUN}@shield.test", "role": "SITE_KIOSK",
+                                     "password": pw}, owner, expect=400, raw=True)
+check(code == 400, "site device must be limited to a site")
+call("POST", "/v1/users", {"fullName": "Green Valley gate tablet", "email": f"kiosk.{RUN}@shield.test", "role": "SITE_KIOSK",
+                           "password": pw, "siteIds": [siteB["id"]]}, owner)
+kiosk_t = call("POST", "/v1/auth/login", {"login": f"kiosk.{RUN}@shield.test", "password": pw})["accessToken"]
+code, _ = call("GET", "/v1/employees", token=kiosk_t, expect=403, raw=True)
+check(code == 403, "kiosk device cannot read employee records")
+
+
+def photo(token, kind, site=None, emp=None):
+    return call("POST", "/v1/attendance/photos", {"kind": kind, "contentType": "image/jpeg", "dataBase64": JPEG,
+                                                  "siteId": site, "employeeId": emp}, token)["id"]
+
+
+def kiosk(code_, pin, kind, when, photo_id=None, expect=None, cid=None):
+    body = {"clientEventId": cid or str(uuid.uuid4()), "employeeCode": code_, "pin": pin, "kind": kind, "occurredAt": when,
+            "latitude": siteB["latitude"], "longitude": siteB["longitude"], "accuracyM": 8, "deviceId": "GVS-GATE-TAB",
+            "photoId": photo_id}
+    return call("POST", "/v1/attendance/kiosk/punch", body, kiosk_t, idem=True, expect=expect, raw=expect is not None)
+
+
+nov2 = date(2026, 11, 2)
+code, _ = kiosk("G1", "4826", "CHECK_IN", at(nov2, 8, 2), expect=400)
+check(code == 400, "kiosk punch without a photo refused")
+p1 = photo(kiosk_t, "SELFIE", siteB["id"], G["G1"])
+k_in = kiosk("g1", "4826", "CHECK_IN", at(nov2, 8, 2), p1)
+check(k_in.get("recordId") and k_in["status"] in ("ACCEPTED", "FLAGGED"), f"G1 checks in on the gate kiosk with code + PIN ({k_in['status']} {k_in['flags']})")
+k_wrong_site = kiosk("G3", "7391", "CHECK_IN", at(nov2, 8, 5), p1)
+check(k_wrong_site.get("recordId") is None, f"punch for a guard rostered elsewhere is not counted here ({k_wrong_site['flags']})")
+for i in range(5):
+    code, body = kiosk("G1", "0000", "CHECK_OUT", at(nov2, 20, 0), p1, expect=400)
+code, body = kiosk("G1", "4826", "CHECK_OUT", at(nov2, 20, 0), p1, expect=422)
+check(code == 422 and "locked" in body, "PIN locks after 5 wrong attempts, even for the right PIN")
+call("POST", f"/v1/employees/{G['G1']}/kiosk-pin", {"pin": "5937"}, ops_t)
+out_ev = {"clientEventId": str(uuid.uuid4()), "employeeCode": "G1", "pin": "5937", "kind": "CHECK_OUT", "occurredAt": at(nov2, 20, 1),
+          "latitude": siteB["latitude"], "longitude": siteB["longitude"], "deviceId": "GVS-GATE-TAB", "photoId": p1, "offline": True}
+sync = call("POST", "/v1/attendance/kiosk/punch/batch", [out_ev], kiosk_t)
+resync = call("POST", "/v1/attendance/kiosk/punch/batch", [out_ev], kiosk_t)
+check(sync[0]["recordStatus"] == "PRESENT" and resync[0]["duplicate"], "offline kiosk check-out synced once (PIN reset by office)")
+rec_k = [r for r in call("GET", "/v1/attendance/records?from=2026-11-02&to=2026-11-02", token=owner) if r["employee_code"] == "G1"][0]
+check(rec_k["sources"] == ["KIOSK"], f"duty evidenced by KIOSK ({rec_k['sources']})")
+
+nov3 = date(2026, 11, 3)
+sheetA = call("GET", f"/v1/attendance/sheet?siteId={siteA['id']}&date=2026-11-03", token=ops_t)
+dayA = [r for r in sheetA if r["employeeCode"] == "G3"][0]
+sheetB = call("GET", f"/v1/attendance/sheet?siteId={siteB['id']}&date=2026-11-03", token=ops_t)
+rc = {"batchId": str(uuid.uuid4()), "siteId": siteA["id"], "kind": "CHECK_IN", "occurredAt": at(nov3, 8, 5),
+      "assignmentIds": [dayA["assignmentId"], sheetB[0]["assignmentId"]], "latitude": siteA["latitude"], "longitude": siteA["longitude"],
+      "accuracyM": 15, "deviceId": "OPS-PHONE"}
+code, _ = call("POST", "/v1/attendance/roll-call", rc, ops_t, idem=True, expect=400, raw=True)
+check(code == 400, "roll-call without a team photo refused")
+rc["photoId"] = photo(ops_t, "TEAM", siteA["id"])
+res = call("POST", "/v1/attendance/roll-call", rc, ops_t, idem=True)
+check(res["marked"] == 1 and res["rejected"] == 1, "roll-call marks the Site A team; a Site B duty in the list is rejected")
+again_rc = call("POST", "/v1/attendance/roll-call", rc, ops_t, idem=True)
+check(all(r["duplicate"] for r in again_rc["results"] if r["status"] != "REJECTED"), "roll-call replay is deduplicated")
+call("POST", "/v1/attendance/roll-call", {**rc, "batchId": str(uuid.uuid4()), "kind": "CHECK_OUT", "occurredAt": at(nov3, 20, 0),
+                                          "assignmentIds": [dayA["assignmentId"]]}, ops_t, idem=True)
+rec_rc = [r for r in call("GET", f"/v1/attendance/records?from=2026-11-03&to=2026-11-03&siteId={siteA['id']}", token=owner)
+          if r["employee_code"] == "G3"][0]
+check(rec_rc["status"] == "PRESENT" and rec_rc["approval_status"] == "PENDING" and rec_rc["sources"] == ["SUPERVISOR"],
+      "supervisor-marked duty is never auto-approved")
+ap_self = call("POST", "/v1/attendance/approvals", {"recordIds": [rec_rc["id"]], "decision": "APPROVED"}, ops_t, idem=True)
+check(ap_self["updated"] == 0 and "another person" in ap_self["skipped"][0], "the person who marked it cannot approve it")
+check(call("POST", "/v1/attendance/approvals", {"recordIds": [rec_rc["id"]], "decision": "APPROVED"}, owner, idem=True)["updated"] == 1,
+      "a second person approves the roll-call duty")
+
+call("POST", "/v1/users", {"fullName": "Sunil Supervisor", "email": f"sup.{RUN}@shield.test", "role": "SUPERVISOR", "password": pw,
+                           "siteIds": [siteA["id"]]}, owner)
+sup_t = call("POST", "/v1/auth/login", {"login": f"sup.{RUN}@shield.test", "password": pw})["accessToken"]
+code, _ = call("POST", "/v1/attendance/roll-call", {**rc, "batchId": str(uuid.uuid4()), "siteId": siteB["id"],
+                                                    "assignmentIds": [sheetB[0]["assignmentId"]]}, sup_t, idem=True, expect=404, raw=True)
+check(code == 404, "site supervisor cannot mark attendance at another site")
+
+nov4 = call("GET", f"/v1/attendance/sheet?siteId={siteB['id']}&date=2026-11-04", token=ops_t)[0]
+reg = {"siteId": siteB["id"], "date": "2026-11-04", "note": "Gate register page 14",
+       "entries": [{"assignmentId": nov4["assignmentId"], "status": "PRESENT"}]}
+code, _ = call("POST", "/v1/attendance/register-entry", reg, ops_t, idem=True, expect=400, raw=True)
+check(code == 400, "register entry needs a photo of the signed register")
+reg["photoId"] = photo(ops_t, "REGISTER", siteB["id"])
+re_ = call("POST", "/v1/attendance/register-entry", reg, ops_t, idem=True)
+own = call("POST", "/v1/attendance/adjustments/decisions", {"ids": re_["adjustmentIds"], "approve": True}, ops_t, idem=True)
+check(own["updated"] == 0, "office clerk cannot approve their own register entry")
+listed = call("GET", f"/v1/attendance/adjustments?batchId={re_['batchId']}", token=owner)
+check(len(listed) == 1 and listed[0]["photoId"] == reg["photoId"] and listed[0]["employeeCode"] == "G1", "reviewer sees who/where/when + register photo")
+call("POST", "/v1/attendance/adjustments/decisions", {"ids": re_["adjustmentIds"], "approve": True, "note": "matches register"}, owner, idem=True)
+rec_m = [r for r in call("GET", f"/v1/attendance/records?from=2026-11-04&to=2026-11-04&siteId={siteB['id']}", token=owner)][0]
+check(rec_m["status"] == "PRESENT" and rec_m["approval_status"] == "APPROVED" and "MANUAL" in rec_m["sources"], "register duty approved as MANUAL")
+
+code, _ = call("GET", f"/v1/attendance/photos/{p1}", token=owner, raw=True)
+check(code == 200, "reviewer can open the kiosk photo")
+code, _ = call("GET", f"/v1/attendance/photos/{p1}", token=g3_t, expect=404, raw=True)
+check(code == 404, "another guard cannot open it")
+code, _ = call("GET", f"/v1/attendance/photos/{p1}", token=other, expect=404, raw=True)
+check(code == 404, "other agency cannot open it")
+
+step("Client confirms / disputes attendance; a dispute blocks the invoice until resolved")
+call("POST", "/v1/users", {"fullName": "Phoenix Facility Manager", "email": f"client.{RUN}@phoenix.test", "role": "CLIENT_ADMIN",
+                           "clientId": c1["id"], "password": "Client@123"}, owner)
+cl_t = call("POST", "/v1/auth/login", {"login": f"client.{RUN}@phoenix.test", "password": "Client@123"})["accessToken"]
+sheet_c = call("GET", f"/v1/portal/attendance?month=2026-11&siteId={siteA['id']}", token=cl_t)
+d3 = [d for d in sheet_c["days"] if d["day"] == 3][0]
+check(d3["required"] == 2 and float(d3["reported"]) == 1, f"client sees 3 Nov: 2 required, 1 reported ({d3})")
+check(all("pay" not in str(k).lower() for p in sheet_c["people"] for k in p), "client sheet has no pay data")
+code, _ = call("POST", "/v1/portal/attendance/signoff", {"siteId": siteB["id"], "month": "2026-11", "status": "CONFIRMED"}, cl_t,
+               expect=404, raw=True)
+check(code == 404, "client cannot sign off another client's site")
+call("POST", "/v1/portal/attendance/signoff", {"siteId": siteA["id"], "month": "2026-11", "status": "DISPUTED", "note": "Night guard missing",
+                                               "disputes": [{"date": "2026-11-03", "note": "No night guard seen at 2 am"}]}, cl_t)
+so = [r for r in call("GET", "/v1/attendance/signoffs?month=2026-11", token=fin_t) if r["siteId"] == siteA["id"]][0]
+check(so["status"] == "DISPUTED" and so["disputes"][0]["date"] == "2026-11-03", "agency sees the dispute")
+gen_n = call("POST", "/v1/invoices/generate", {"clientId": c1["id"], "month": "2026-11"}, fin_t, idem=True)
+check(any("DISPUTED" in w for w in gen_n["warnings"]), f"invoice generation warns about the dispute")
+inv_n = gen_n["invoice"]
+call("POST", f"/v1/invoices/{inv_n['id']}/review", {}, fin_t, idem=True)
+call("POST", f"/v1/invoices/{inv_n['id']}/approve", {}, owner, idem=True)
+code, body = call("POST", f"/v1/invoices/{inv_n['id']}/issue", {}, owner, idem=True, expect=422, raw=True)
+check(code == 422 and "disputed" in body, "invoice cannot be issued while the dispute is open")
+call("POST", f"/v1/attendance/signoffs/{so['id']}/resolve", {"note": "Night post was vacant on 3 Nov; not billed"}, ops_t)
+issued_n = call("POST", f"/v1/invoices/{inv_n['id']}/issue", {}, owner, idem=True)
+check(issued_n["status"] == "ISSUED", "issued after the dispute was resolved")
+
 # ------------------------------------------------------------------ isolation
 step("Tenant isolation")
 code, _ = call("GET", f"/v1/employees/{G['G1']}", token=other, expect=404, raw=True)
@@ -372,8 +523,58 @@ check(call("GET", "/v1/employees", token=other)["total"] == 0, "other agency see
 code, _ = call("GET", f"/v1/invoices/{inv1['id']}", token=other, expect=404, raw=True)
 check(code == 404, "other agency cannot read our invoice")
 
-call("POST", "/v1/users", {"fullName": "Phoenix Facility Manager", "email": f"client.{RUN}@phoenix.test", "role": "CLIENT_ADMIN",
-                           "clientId": c1["id"], "password": "Client@123"}, owner)
+# ------------------------------------------------------------------ platform operator (needs PLATFORM_ADMIN_* on the server)
+PA_EMAIL, PA_PW = os.environ.get("E2E_PLATFORM_EMAIL"), os.environ.get("E2E_PLATFORM_PASSWORD")
+if PA_EMAIL and PA_PW:
+    step("Platform operator: onboard an agency, plans and limits, trial expiry, suspension")
+    pa = call("POST", "/v1/auth/login", {"login": PA_EMAIL, "password": PA_PW})["accessToken"]
+    code, _ = call("GET", "/v1/platform/tenants", token=owner, expect=404, raw=True)
+    check(code == 404, "agency owner cannot see the platform console")
+    plans = {p["code"]: p for p in call("GET", "/v1/platform/plans", token=pa)}
+    check(plans["STARTER"]["maxSites"] == 5 and plans["ENTERPRISE"].get("maxEmployees") is None, "plan catalogue")
+    nt = call("POST", "/v1/platform/tenants", {"agencyName": f"Raksha Services {RUN}", "stateCode": "29", "ownerName": "Ravi Raksha",
+                                               "ownerEmail": f"ravi.{RUN}@raksha.test", "plan": "STARTER", "maxSites": 2, "trialDays": 14,
+                                               "notes": "Referred by Shield"}, pa, expect=201)
+    check(nt["temporaryPassword"] and nt["status"] == "TRIAL" and nt["limits"]["sites"] == 2, "operator onboards an agency with a temporary password")
+    rv = call("POST", "/v1/auth/login", {"login": nt["ownerLogin"], "password": nt["temporaryPassword"]})["accessToken"]
+    call("POST", "/v1/auth/change-password", {"currentPassword": nt["temporaryPassword"], "newPassword": "Raksha@2026"}, rv)
+    rv = call("POST", "/v1/auth/login", {"login": nt["ownerLogin"], "password": "Raksha@2026"})["accessToken"]
+    check(call("GET", "/v1/settings/plan", token=rv)["limits"]["sites"] == 2, "owner changed the temporary password and sees the plan")
+    check(len(call("GET", "/v1/service-types", token=rv)["items"]) >= 6, "new agency starts with default worker types")
+    rb = call("GET", "/v1/branches", token=rv)["items"][0]
+    rc = call("POST", "/v1/clients", {"code": "TP", "legalName": "Tech Park LLP"}, rv)
+    for i in (1, 2):
+        call("POST", "/v1/sites", {"clientId": rc["id"], "branchId": rb["id"], "code": f"TP{i}", "name": f"Tech Park Tower {i}"}, rv)
+    code, body = call("POST", "/v1/sites", {"clientId": rc["id"], "branchId": rb["id"], "code": "TP3", "name": "Tower 3"}, rv, expect=422, raw=True)
+    check(code == 422 and "plan allows 2 sites" in body, "site limit of the plan is enforced")
+    call("PATCH", f"/v1/platform/tenants/{nt['id']}", {"plan": "GROWTH"}, pa)
+    call("POST", "/v1/sites", {"clientId": rc["id"], "branchId": rb["id"], "code": "TP3", "name": "Tower 3"}, rv)
+    check(True, "after upgrading to GROWTH the third site is allowed")
+    pv = call("GET", f"/v1/platform/tenants/{nt['id']}", token=pa)
+    check(pv["usage"]["sites"] == 3 and pv["owner"]["email"] == nt["ownerLogin"], "operator sees usage counts and owner")
+    check("employees" in pv["usage"] and "items" not in pv, "operator sees counts only, no agency records")
+    code, _ = call("GET", "/v1/employees", token=pa, expect=403, raw=True)
+    check(code in (403,), "operator cannot read agency employees")
+    call("PATCH", f"/v1/platform/tenants/{nt['id']}", {"status": "SUSPENDED", "reason": "Payment overdue"}, pa)
+    code, _ = call("GET", "/v1/me", token=rv, expect=401, raw=True)
+    check(code == 401, "suspension signs the agency's users out immediately")
+    code, body = call("POST", "/v1/auth/login", {"login": nt["ownerLogin"], "password": "Raksha@2026"}, expect=403, raw=True)
+    check(code == 403 and "suspended" in body, "suspended agency cannot sign in")
+    call("PATCH", f"/v1/platform/tenants/{nt['id']}", {"extendTrialDays": 1}, pa)
+    check(call("POST", "/v1/auth/login", {"login": nt["ownerLogin"], "password": "Raksha@2026"})["accessToken"], "restored by extending the trial")
+    rs = call("POST", f"/v1/platform/tenants/{nt['id']}/reset-owner-password", {}, pa)
+    code, _ = call("POST", "/v1/auth/login", {"login": nt["ownerLogin"], "password": "Raksha@2026"}, expect=401, raw=True)
+    rv = call("POST", "/v1/auth/login", {"login": rs["login"], "password": rs["temporaryPassword"]})["accessToken"]
+    check(code == 401 and rv, "operator resets a locked-out owner's password (old one stops working)")
+    call("POST", "/v1/users", {"fullName": "Raksha Ops", "email": f"ops.{RUN}@raksha.test", "role": "OPERATIONS", "password": "Initial@123"}, rv)
+    m = [x for x in call("GET", "/v1/users", token=rv) if x.get("email") == f"ops.{RUN}@raksha.test"][0]
+    ur = call("POST", f"/v1/users/{m['membershipId']}/reset-password", {}, rv)
+    check(call("POST", "/v1/auth/login", {"login": ur["login"], "password": ur["temporaryPassword"]})["accessToken"], "owner resets a staff member's password")
+    call("PATCH", f"/v1/platform/tenants/{nt['id']}", {"status": "ACTIVE"}, pa)
+    check(call("GET", f"/v1/platform/tenants/{nt['id']}", token=pa).get("trialEndsAt") is None, "activated: paid agency has no trial end")
+else:
+    print("  SKIP  platform operator checks (set E2E_PLATFORM_EMAIL / E2E_PLATFORM_PASSWORD)")
+
 print(f"""
 Logins created (password in brackets):
   Owner       owner.{RUN}@shield.test  (Passw0rd!)
@@ -381,6 +582,8 @@ Logins created (password in brackets):
   Operations  ops.{RUN}@shield.test    (Passw0rd!)
   Guard G3    8{RUN[:3]}333333           (guard123)   -> phone view /guard
   Client      client.{RUN}@phoenix.test (Client@123) -> client portal /portal
+  Supervisor  sup.{RUN}@shield.test    (Passw0rd!)   -> Site A only
+  Gate kiosk  kiosk.{RUN}@shield.test  (Passw0rd!)   -> /kiosk at Site B; G1 punches with code G1 + PIN 5937
 """)
 print("\n" + ("ALL CHECKS PASSED" if not FAILS else f"{len(FAILS)} CHECK(S) FAILED:\n  - " + "\n  - ".join(FAILS)))
 sys.exit(1 if FAILS else 0)

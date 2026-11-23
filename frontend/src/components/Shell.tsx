@@ -3,6 +3,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { LogOut, Menu, X } from "lucide-react";
+import { ChangePasswordButton } from "@/components/ChangePassword";
 import { useSession } from "@/lib/session";
 import { NAV, allowed, homeFor } from "./nav";
 import { Loading } from "./ui";
@@ -46,6 +47,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     if (loading) return;
     if (!me) router.replace("/login");
     else if (me.role === "GUARD") router.replace("/guard");
+    else if (me.role === "SITE_KIOSK") router.replace("/kiosk");
     else if (me.role === "CLIENT_ADMIN" || me.role === "CLIENT_VIEWER") router.replace("/portal");
   }, [me, loading, router]);
 
@@ -101,6 +103,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-3 text-sm">
             <TenantSwitcher />
             <span className="hidden text-slate-600 sm:inline">{me.name} · <span className="text-xs text-slate-400">{me.role}</span></span>
+            <ChangePasswordButton />
             <button className="btn-ghost" onClick={logout}><LogOut size={16} /> <span className="hidden sm:inline">Logout</span></button>
           </div>
         </header>

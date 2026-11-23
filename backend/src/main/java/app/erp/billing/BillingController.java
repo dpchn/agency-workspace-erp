@@ -142,7 +142,7 @@ public class BillingController {
                 <tr><td colspan=4 class=r>CGST</td><td class=r>%s</td></tr><tr><td colspan=4 class=r>SGST</td><td class=r>%s</td></tr>
                 <tr><td colspan=4 class=r>IGST</td><td class=r>%s</td></tr><tr><th colspan=4 class=r>Total (%s)</th><th class=r>%s</th></tr></table>
                 <p class=muted>%s</p></body></html>""".formatted(
-                title, e(inv.getInvoiceNo()), color, e(t.getLegalName() != null ? t.getLegalName() : t.getName()), e(t.getGstin()),
+                title, e(inv.getInvoiceNo()), color, e(t.getName()), e(t.getLegalName() != null ? t.getLegalName() : t.getName()), e(t.getGstin()),
                 title, e(inv.getInvoiceNo() == null ? "DRAFT" : inv.getInvoiceNo()), e(inv.getIssueDate()), e(inv.getDueDate()),
                 e(inv.getPeriodStart()), e(inv.getPeriodEnd()), e(c.get("legal_name")), e(c.get("billing_address")), e(c.get("gstin")),
                 e(inv.getPlaceOfSupply()), rows, inv.getSubtotal(), inv.getCgst(), inv.getSgst(), inv.getIgst(), e(t.getCurrency()),

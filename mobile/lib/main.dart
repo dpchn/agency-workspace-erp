@@ -5,7 +5,9 @@ import 'core/session.dart';
 import 'screens/guard/duty_tab.dart';
 import 'screens/guard/self_tabs.dart';
 import 'screens/incidents_tab.dart';
+import 'screens/kiosk/kiosk_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/supervisor/roll_call_tab.dart';
 import 'screens/supervisor/team_tabs.dart';
 
 void main() {
@@ -38,7 +40,10 @@ class ErpApp extends StatelessWidget {
             ? const Scaffold(body: Center(child: CircularProgressIndicator()))
             : session.me == null
                 ? LoginScreen(session: session)
-                : HomeScreen(session: session),
+                // a shared site device opens straight into kiosk mode
+                : session.isSiteKiosk
+                    ? KioskScreen(key: ValueKey(session.userName), session: session)
+                    : HomeScreen(session: session),
       ),
     );
   }
@@ -67,6 +72,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (s.isSupervisor) {
       return [
         _TabDef('Today', Icons.today, TodayTab(session: s)),
+        if (s.can('ATTENDANCE_MARK')) _TabDef('Roll-call', Icons.groups_outlined, RollCallTab(session: s)),
         if (s.can('ATTENDANCE_APPROVE')) _TabDef('Approve', Icons.fact_check_outlined, ApprovalsTab(session: s)),
         if (s.employeeId != null) _TabDef('My duty', Icons.badge_outlined, DutyTab(session: s)),
         _TabDef('Incidents', Icons.report_outlined, IncidentsTab(session: s)),
@@ -105,16 +111,22 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ]),
         actions: [
+          if (s.can('ATTENDANCE_KIOSK'))
+            IconButton(
+              tooltip: 'Kiosk mode (for workers without a phone)',
+              icon: const Icon(Icons.tablet_android_outlined),
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => KioskScreen(session: s, handedOver: true))),
+            ),
           IconButton(
             tooltip: 'Sign out',
             icon: const Icon(Icons.logout),
             onPressed: () async {
-              if (s.queue.pending > 0) {
+              if (s.queue.pending > 0 || s.actions.pending > 0) {
                 final ok = await showDialog<bool>(
                   context: context,
                   builder: (c) => AlertDialog(
                     title: const Text('Unsynced punches'),
-                    content: Text('${s.queue.pending} check-in/out(s) are still on this phone. Sign out anyway? They will sync after the next sign-in.'),
+                    content: Text('${s.queue.pending + s.actions.pending} check-in/out(s) are still on this phone. Sign out anyway? They will sync after the next sign-in.'),
                     actions: [TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Stay')), TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('Sign out'))],
                   ),
                 );

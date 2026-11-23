@@ -1,6 +1,7 @@
 package app.erp.hr;
 
 import app.erp.common.TenantEntity;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
@@ -47,6 +48,20 @@ public class Employee extends TenantEntity {
     private Instant consentAt;
     @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     private UUID userId;
+    /** False for workers who punch on a site kiosk or are marked by their supervisor. */
+    private Boolean hasSmartphone = true;
+    @JsonIgnore
+    private String attendancePinHash;
+    @JsonIgnore
+    private Integer pinFailedCount = 0;
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    private Instant pinLockedUntil;
+    /** Reference photo shown on the kiosk / roll-call so the supervisor can match the face. */
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    private UUID profilePhotoId;
+
+    @JsonProperty(value = "kioskPinSet", access = JsonProperty.Access.READ_ONLY)
+    public boolean isKioskPinSet() { return attendancePinHash != null; }
 
     public String fullName() { return lastName == null || lastName.isBlank() ? firstName : firstName + " " + lastName; }
 

@@ -76,6 +76,14 @@ at that client's sites.
 | 28 | Different month-to-day conversion | Tenant setting `payDivisor`: CALENDAR_DAYS, 26 or 30. |
 | 29 | Supervisor sees only their sites; client sees only their data | Memberships carry branch and site scope plus client or employee links. Out-of-scope access gets non-disclosing 404s. |
 | 30 | Facility management (housekeeping, drivers) | Service types are generic. Everything above applies unchanged. |
+| 31 | Worker has **no smartphone** | `hasSmartphone=false` and a kiosk PIN. They punch on a **site kiosk** (gate tablet, role `SITE_KIOSK`) or the supervisor's phone in kiosk mode, with code + PIN + photo. The duty's `sources` = `KIOSK`. |
+| 32 | **Buddy punching** (someone else's PIN) | Each kiosk punch stores a photo for review. Five wrong PINs lock the PIN. A punch for someone with no duty at that site is not counted (`WRONG_SITE`). |
+| 33 | Supervisor marks the **whole team** | Roll-call: one team photo + the supervisor's GPS marks the selected duties at one site. Source `SUPERVISOR`, never auto-approved, and the supervisor can't approve it. A site-limited supervisor can't mark other sites. |
+| 34 | Site with **no phone and no kiosk** (paper register) | Office enters the signed register page with its photo. Each line becomes a correction request, approved by another person. Source `MANUAL`. |
+| 35 | **Ghost guards** (inventing attendance) | Proxy and register marking always need a second person (`autoApproveSources`). Who marked each punch is kept (`marked_by`), along with photos, location and device. |
+| 36 | Client says **"your guard wasn't there"** | Client portal: required vs reported per day. The client confirms or disputes the month. A dispute holds that month's invoice until the agency corrects the attendance and resolves the dispute. |
+| 37 | Mixed team at one site (supervisor + guards + housekeeping) | Each role is its own post with its own service type. Contract and pay rates are keyed by site + service type, so each person's duty is priced correctly, and the client sees each role in the attendance sheet. |
+| 38 | Server runs in a non-UTC time zone | Shift templates are wall-clock times in the site's (or agency's) time zone, independent of the server's zone. |
 
 ## Configurable policies (Settings → Policies)
 
@@ -83,7 +91,8 @@ at that client's sites.
 `paidLeaveTypes`, `lateGraceMinutes`, `fullDayMinPercent`, `halfDayMinPercent`,
 `autoApproveCleanAttendance`, `checkInWindowMinutes`, `lateSubmissionHours`, `maxAccuracyMeters`,
 `maxTravelKmph`, `minRestHours`, `maxShiftsPerDay`, `requireApprovalSeparation`, `invoicePrefix`,
-`creditNotePrefix`, `defaultGstRatePct`, `incidentResponseMinutes`.
+`creditNotePrefix`, `defaultGstRatePct`, `incidentResponseMinutes`, `autoApproveSources`, `kioskPhotoRequired`,
+`rollCallPhotoRequired`, `pinMaxAttempts`, `pinLockMinutes`, `blockInvoiceOnDispute`.
 
 Statutory components (PF, ESI, PT and so on) are tenant data in **Salary components**, not code.
 The seeded values are illustrative only and must be validated by a payroll professional for

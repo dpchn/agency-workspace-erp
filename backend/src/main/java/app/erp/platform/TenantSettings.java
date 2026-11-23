@@ -21,6 +21,13 @@ public record TenantSettings(Map<String, Object> raw) {
             Map.entry("fullDayMinPercent", 75),                // worked % of shift for a full duty
             Map.entry("halfDayMinPercent", 40),                // worked % for a half duty
             Map.entry("autoApproveCleanAttendance", true),     // un-flagged, completed duties approve themselves
+            Map.entry("autoApproveSources", List.of("MOBILE", "KIOSK")), // only these ways of marking may auto-approve;
+                                                               // SUPERVISOR (proxy) and MANUAL (register) always need a second person
+            Map.entry("kioskPhotoRequired", true),             // shared site device takes a photo with every punch
+            Map.entry("rollCallPhotoRequired", true),          // supervisor roll-call needs a photo of the team
+            Map.entry("pinMaxAttempts", 5),                    // wrong kiosk PINs before the PIN locks
+            Map.entry("pinLockMinutes", 15),
+            Map.entry("blockInvoiceOnDispute", true),          // a client's unresolved attendance dispute blocks issuing its invoice
             Map.entry("checkInWindowMinutes", 120),            // how early/late a check-in may match a shift
             Map.entry("lateSubmissionHours", 6),               // offline sync older than this is flagged
             Map.entry("maxAccuracyMeters", 100),

@@ -167,11 +167,42 @@ The system never lets one person hold two overlapping duties; the database itsel
 
 ## 7. Attendance
 
-**How punches arrive**
-* Guards check in and out in the **Android app** (or the web `/guard` page). GPS is attached and the site's
-  geofence is checked. With no network the punch is saved on the phone and synced later.
-* Supervisors can mark a guard who has no phone (app → Today → ⋮ → Mark checked in/out).
+**How punches arrive.** There are four ways, so that everyone can be counted, including staff without a phone:
+
+| Way | Who | Evidence kept | Approves itself? |
+|---|---|---|---|
+| **Own phone** (`MOBILE`) | Guards with a smartphone: Android app or web `/guard` | GPS + geofence, device, optional selfie | Yes, if clean |
+| **Site kiosk** (`KIOSK`) | Workers without a phone: a shared tablet at the gate, or the supervisor's phone in kiosk mode | Employee code + **PIN**, **photo** at the device, device location | Yes, if clean |
+| **Supervisor roll-call** (`SUPERVISOR`) | Supervisor marks the team on duty in one go | **Team photo**, supervisor's GPS, who marked | **No**: someone else approves |
+| **Paper register** (`MANUAL`) | Office types in a signed register page (no phone, no kiosk at that site) | **Photo of the register page**, who entered it | **No**: someone else approves |
+
 * Each punch is matched to the rostered duty, and lateness, overtime, half/full day are worked out automatically.
+  Whichever way was used, the duty is still priced at **that site's** contract rate and pay rate.
+* The **Sources** column on the attendance page shows how each duty was evidenced. Which ways may approve
+  themselves is a policy (`autoApproveSources`).
+* **Maker-checker for proxy marking:** whoever marked a duty for someone else (roll-call, single mark, register entry)
+  can't approve it. A second person must approve it, which stops one person inventing attendance.
+* With no network, phones and kiosks save punches on the device and sync later. Late uploads are flagged.
+
+**Workers without a phone: setup**
+1. **Employees → (person) → Has smartphone: off**, then **Set kiosk PIN** (4–6 digits; easy PINs like 1111 or 1234
+   are refused). Add a **profile photo** so the supervisor and kiosk can match faces.
+2. Either put a **site kiosk** at the gate: **Settings & users → Add user → role *Site device (kiosk)***, limited
+   to that site. Sign in on a tablet at **/kiosk** (or in the Android app). It can only punch people in and out at
+   its own site and can't see anything else. Or the **supervisor** uses kiosk mode or roll-call on their own phone.
+3. Five wrong PINs lock that person's PIN for 15 minutes (`pinMaxAttempts`, `pinLockMinutes`). Setting a new PIN
+   unlocks it.
+4. A person who punches at a kiosk at a site where they have no duty is **not** counted there (flag `WRONG_SITE`). A
+   supervisor limited to some sites can't mark anyone at other sites.
+
+**Team roll-call (Attendance → Team roll-call, or the supervisor app):** choose the site and date, tick the people
+present, take one photo of the team, then **Mark in** (and later **Mark out**). Everyone is marked with your location
+and the photo. Each result is shown per person. A duty at another site is rejected.
+
+**Paper register entry (Attendance → Register entry):** choose the site and date, set each person to P/H/A
+(optionally the times), attach a photo of the signed register page, and submit. This creates correction
+requests. **Another person** approves them under *Corrections*, where they see the register photo next to each
+line and can approve a whole page at once.
 
 **Automatic checks** (never automatic penalties; flagged for review): outside geofence, poor GPS accuracy,
 impossible travel speed, the same phone used by two guards, phone clock wrong, uploaded very late, no rostered duty.
@@ -187,6 +218,11 @@ impossible travel speed, the same phone used by two guards, phone clock wrong, u
 
 Once payroll for a month is **locked**, that month's attendance can't be changed. Late approvals are paid in the
 next payroll as arrears.
+
+**Client sign-off (Attendance → Client sign-off):** for each site and month, whether the client has **confirmed**
+the attendance, **disputed** it (with the days and what was wrong), or not responded yet. Correct the attendance if
+the client is right, then **Resolve** with a note. While a dispute is open, that client's invoice for the month
+can't be issued (`blockInvoiceOnDispute`). Invoice generation also warns about sites the client hasn't confirmed.
 
 ---
 
@@ -260,6 +296,10 @@ Choose whether the client can see it (client-reported incidents are always visib
 (e.g. a supervisor sees only their three sites), client (for client users). Change a role or scope at any time.
 **Sign out everywhere** ends all of that user's sessions immediately (lost phone, staff leaving).
 
+**Site device (kiosk)** is a role for a shared tablet or phone fixed at a site. It must be limited to its site(s). It
+can only show who is on duty there today and punch them in and out with code + PIN + photo. If a kiosk is lost,
+**Sign out everywhere** for its user.
+
 ---
 
 ## 14. Guard: Android app
@@ -286,7 +326,9 @@ Sign in with your own login. Supervisor, operations and owner roles get:
 | Tab | Use |
 |---|---|
 | **Today** | Fill rate, uncovered, checked-in, late and absent at the top. Every post's shift, gaps first. **Find guard** fills an open slot from the ranked list. **⋮ → Replace guard** for no-shows. **⋮ → Mark checked in/out** for a guard without a phone (your location is recorded). Arrows change the day. |
-| **Approve** | Flagged or late duties: tick and **Approve** / **Reject** (needs approval rights) |
+| **Roll-call** | Pick a site → tick the team on duty → take a team photo → **Mark in** / **Mark out**. People without a phone are marked "no phone". Works offline (synced later). |
+| **Kiosk mode** | Hand your phone to workers without a phone: they tap their name, enter their PIN and a photo is taken. Leaving kiosk mode needs your confirmation. |
+| **Approve** | Flagged or late duties: tick and **Approve** / **Reject** (needs approval rights). Duties you marked yourself must be approved by someone else. |
 | **My duty** | Your own check-in, if you are also an employee |
 | **Incidents** | Acknowledge, start, resolve, close; report new ones |
 
@@ -298,14 +340,30 @@ Client users (created by the agency with role *Client admin* or *Client viewer*)
 see only their own data: guards required vs reported today per site, outstanding amount, **invoices** (issued
 only, printable), **statement**, and **incidents** shared with them. Client admins can also report incidents.
 
+**Attendance (client admins):** per site and month, a day strip of guards *required vs reported* (short days are
+highlighted) and a person × day grid (names and P/H/A only, no pay data). The client admin either **confirms the
+month** or **disputes** it, choosing the days and saying what was wrong. A dispute reaches the agency
+immediately and holds that month's invoice until the agency resolves it.
+
 ---
 
 ## 17. Platform admin
 
-For you as the SaaS owner (see [DEPLOYMENT.md](DEPLOYMENT.md#3-after-the-first-start) to enable): **/platform**
-lists every agency with status, plan and active users. You can change the status (trial, active, suspended,
-closed), the plan and the employee limit. A suspended agency's users can't sign in. You never see an agency's HR,
-attendance or financial data.
+For you as the SaaS owner (sign-in set up through `PLATFORM_ADMIN_EMAIL`, see
+[DEPLOYMENT.md](DEPLOYMENT.md#3-after-the-first-start)). The **/platform** console:
+
+* **Onboard agency**: creates the agency with defaults and its owner login, and shows a one-time temporary password.
+* **Plans**: Starter (50 staff, 5 sites, 5 office users), Growth (500 / 50 / 25), Enterprise (no limits). **Plan &
+  limits** changes the plan or overrides any limit for one agency. Guard, client and site-device logins never
+  count. When an agency reaches a limit, it sees "Your plan allows N … Ask us to upgrade", and its owner sees
+  usage under **Settings → Plan & usage**.
+* **Trials**: a trial that has ended can't sign in ("The free trial has ended…") until you **Activate** it (paid)
+  or give it **+15 days**.
+* **Suspend** (with a reason): every user of that agency is signed out immediately and can't sign in. **Activate**
+  restores it.
+* Per agency you see the owner and their last sign-in, staff/sites/office users against the plan limits, guard app
+  logins, duties in the last 30 days and the last activity. You never see an agency's HR, attendance or financial
+  records.
 
 ---
 

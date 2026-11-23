@@ -19,6 +19,7 @@ export default function InvoicesPage() {
   const { data, loading, error, reload } = useApi<any[]>("/v1/invoices" + qs(f));
   const [gen, setGen] = useState(false);
   const [sel, setSel] = useState<string | null>(null);
+  const [warnings, setWarnings] = useState<string[]>([]);
   return (
     <div>
       <PageHeader title="Invoices" subtitle="Generated from contracts + approved attendance. Billable units come from the contract, not from payroll days."
@@ -55,11 +56,19 @@ export default function InvoicesPage() {
           onSubmit={async (v) => {
             const r = await api.post("/v1/invoices/generate", v, { idem: true });
             toast.ok("Draft invoice generated");
-            r.warnings?.forEach((w: string) => toast.err(w));
+            setWarnings(r.warnings ?? []);
             setGen(false); reload(); setSel(r.invoice.id);
           }} />
       </Modal>
-      <Modal open={!!sel} title="Invoice" onClose={() => setSel(null)} wide>{sel && <InvoiceDetail id={sel} onChanged={reload} />}</Modal>
+      <Modal open={!!sel} title="Invoice" onClose={() => { setSel(null); setWarnings([]); }} wide>
+        {warnings.length > 0 && (
+          <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+            <div className="font-medium">Check before issuing</div>
+            <ul className="ml-4 list-disc">{warnings.map((w) => <li key={w}>{w}</li>)}</ul>
+          </div>
+        )}
+        {sel && <InvoiceDetail id={sel} onChanged={reload} />}
+      </Modal>
     </div>
   );
 }

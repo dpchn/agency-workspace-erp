@@ -91,7 +91,7 @@ public class BackgroundJobs {
                 try {
                     String channel = switch ((String) r.get("event_type")) {
                         case "IncidentRaised", "IncidentEscalated", "ShiftUncovered" -> "PUSH";
-                        case "InvoiceIssued", "PaymentRecorded" -> "EMAIL";
+                        case "InvoiceIssued", "PaymentRecorded", "AttendanceDisputed" -> "EMAIL";
                         default -> null;
                     };
                     if (channel != null) {

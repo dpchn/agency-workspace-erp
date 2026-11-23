@@ -45,8 +45,14 @@ Follows `docs/specs/02_Backend_System_Architecture.pdf`: a modular monolith on P
 
 * `Idempotency-Key` is required on check-ins, approvals, payroll and invoice actions and payments.
   Replays return the stored response; reusing a key with a different body returns 422.
+* Attendance evidence: every punch records its **source** (`MOBILE`, `KIOSK`, `SUPERVISOR`, `MANUAL`), who recorded
+  it, the device, GPS and an optional photo (`attendance_photos`, stored in PostgreSQL under RLS, so a single-server
+  install needs no object store). Records keep the union of sources and markers. Auto-approval only applies to
+  trusted sources, and a marker can never approve their own proxy marking.
+* Kiosk PIN checks run in their own transaction that commits failed attempts, so the lockout can't be bypassed by
+  an error rolling back.
 * A transactional outbox records `AttendanceApproved`, `PayrollApproved`, `InvoiceIssued`,
-  `PaymentRecorded`, `IncidentRaised`, `IncidentEscalated` and `ShiftUncovered`. A relay turns them
+  `PaymentRecorded`, `IncidentRaised`, `IncidentEscalated`, `ShiftUncovered` and `AttendanceDisputed`. A relay turns them
   into notifications, with at-least-once delivery and `FOR UPDATE SKIP LOCKED`.
 * Background jobs run per tenant in separate transactions, so one agency's failure never blocks another.
 * Optimistic locking (`version`) on every row. Financial corrections are new documents (credit notes,

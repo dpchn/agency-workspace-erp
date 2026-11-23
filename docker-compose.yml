@@ -39,6 +39,8 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-*}   # bearer-token API (no cookies); restrict e.g. https://erp.example.com
       SIGNUP_ENABLED: ${SIGNUP_ENABLED:-true}
       TRIAL_DAYS: ${TRIAL_DAYS:-30}
+      PLATFORM_ADMIN_EMAIL: ${PLATFORM_ADMIN_EMAIL:-}
+      PLATFORM_ADMIN_PASSWORD: ${PLATFORM_ADMIN_PASSWORD:-}
       JOBS_ENABLED: ${JOBS_ENABLED:-true}
       BRAND_NAME: ${BRAND_NAME:-DutyGrid}
       BRAND_TAGLINE: ${BRAND_TAGLINE:-Workforce ERP for security & facility agencies}

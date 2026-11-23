@@ -55,6 +55,7 @@ public class SignupService {
         t.setLegalName(r.agencyName().trim());
         t.setStatus("TRIAL");
         t.setPlan("STARTER");
+        applyPlan(t, PlanCatalog.get("STARTER"));
         t.setStateCode(r.stateCode());
         t.setGstin(r.gstin());
         t.setTimezone("Asia/Kolkata");
@@ -84,6 +85,60 @@ public class SignupService {
         jdbc.queryForObject("select set_config('app.tenant_id', ?, true)", String.class, t.getId().toString());
         seedDefaults(t.getId(), r.stateCode());
         return t;
+    }
+
+    static void applyPlan(Tenant t, PlanCatalog.Plan p) {
+        if (p == null) return;
+        t.setMaxEmployees(p.maxEmployees());
+        t.setMaxSites(p.maxSites());
+        t.setMaxUsers(p.maxUsers());
+    }
+
+    public record OnboardRequest(String agencyName, String slug, String stateCode, String gstin, String ownerName, String ownerEmail,
+                                 String ownerPhone, String plan, String status, Integer trialDays, Integer maxEmployees, Integer maxSites,
+                                 Integer maxUsers, String contactName, String contactPhone, String notes) {}
+
+    public record Onboarded(Tenant tenant, String ownerLogin, String temporaryPassword, boolean existingUser) {}
+
+    /**
+     * Platform operator onboards an agency (works even when public signup is off). The owner gets a one-time
+     * temporary password, shown once to the operator, to be changed at first sign-in.
+     */
+    @Transactional
+    public Onboarded onboard(OnboardRequest r, UUID operatorId) {
+        String plan = r.plan() == null ? "STARTER" : r.plan();
+        if (PlanCatalog.get(plan) == null) throw ApiException.field("plan", "Unknown plan");
+        String status = r.status() == null ? "TRIAL" : r.status();
+        if (!java.util.Set.of("TRIAL", "ACTIVE").contains(status)) throw ApiException.field("status", "TRIAL or ACTIVE");
+        boolean existing = r.ownerEmail() != null && users.findByEmailIgnoreCase(r.ownerEmail().trim()).isPresent();
+        String temp = existing ? null : temporaryPassword();
+        Tenant t = signup(new SignupRequest(r.agencyName(), r.slug(), r.stateCode(), r.gstin(), r.ownerName(), r.ownerEmail(),
+                blankToNull(r.ownerPhone()), existing ? "unused-existing-user" : temp));
+        t.setPlan(plan);
+        t.setStatus(status);
+        applyPlan(t, PlanCatalog.get(plan));
+        if (r.maxEmployees() != null) t.setMaxEmployees(r.maxEmployees());
+        if (r.maxSites() != null) t.setMaxSites(r.maxSites());
+        if (r.maxUsers() != null) t.setMaxUsers(r.maxUsers());
+        t.setTrialEndsAt("TRIAL".equals(status)
+                ? Instant.now().plus(r.trialDays() == null ? props.signup().trialDays() : r.trialDays(), ChronoUnit.DAYS) : null);
+        t.setContactName(blankToNull(r.contactName()));
+        t.setContactEmail(r.ownerEmail().trim().toLowerCase());
+        t.setContactPhone(blankToNull(r.contactPhone()));
+        t.setPlatformNotes(blankToNull(r.notes()));
+        t.setOnboardedBy(operatorId);
+        tenants.save(t);
+        return new Onboarded(t, r.ownerEmail().trim().toLowerCase(), temp, existing);
+    }
+
+    private static String blankToNull(String s) { return s == null || s.isBlank() ? null : s.trim(); }
+
+    static String temporaryPassword() {
+        String chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+        var rnd = new java.security.SecureRandom();
+        StringBuilder b = new StringBuilder();
+        for (int i = 0; i < 12; i++) b.append(chars.charAt(rnd.nextInt(chars.length())));
+        return b + "#" + (10 + rnd.nextInt(90));
     }
 
     private void seedDefaults(UUID tenant, String stateCode) {

@@ -7,15 +7,16 @@ import { Brand, TenantSwitcher } from "./Shell";
 import { Loading } from "./ui";
 
 /** Minimal layout for the guard app and client portal. */
-export function MiniShell({ roles, children }: { roles: string[]; children: React.ReactNode }) {
+export function MiniShell({ roles, perm, wide, children }: { roles: string[]; perm?: string; wide?: boolean; children: React.ReactNode }) {
   const { me, loading, logout } = useSession();
   const router = useRouter();
+  const ok = !!me && (roles.includes(me.role ?? "") || (!!perm && !!me.permissions?.includes(perm)));
   useEffect(() => {
     if (loading) return;
     if (!me) router.replace("/login");
-    else if (!roles.includes(me.role ?? "")) router.replace("/");
-  }, [me, loading, roles, router]);
-  if (loading || !me || !roles.includes(me.role ?? "")) return <Loading />;
+    else if (!ok) router.replace("/");
+  }, [me, loading, ok, router]);
+  if (loading || !me || !ok) return <Loading />;
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-30 flex items-center justify-between border-b bg-white px-4 py-2">
@@ -26,7 +27,7 @@ export function MiniShell({ roles, children }: { roles: string[]; children: Reac
           <button className="btn-ghost" onClick={logout} aria-label="Logout"><LogOut size={16} /></button>
         </div>
       </header>
-      <main className="mx-auto max-w-3xl p-4">{children}</main>
+      <main className={`mx-auto ${wide ? "max-w-5xl" : "max-w-3xl"} p-4`}>{children}</main>
     </div>
   );
 }

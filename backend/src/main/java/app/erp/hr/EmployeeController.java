@@ -59,7 +59,7 @@ public class EmployeeController extends CrudSupport<Employee> {
             Integer max = tenantService.current().getMaxEmployees();
             if (max != null) {
                 Long active = jdbc.queryForObject("select count(*) from employees where status <> 'EXITED'", Long.class);
-                if (active != null && active >= max) throw ApiException.invalidState("Plan limit of " + max + " employees reached");
+                if (active != null && active >= max) throw ApiException.invalidState("Your plan allows " + max + " employees. Ask us to upgrade your plan");
             }
         }
     }
@@ -123,6 +123,30 @@ public class EmployeeController extends CrudSupport<Employee> {
         cancelFutureAssignments(e.getId(), date.plusDays(1), "Employee exited");
         if (e.getUserId() != null) memberships.findByTenantIdAndUserId(TenantContext.requireTenant(), e.getUserId()).ifPresent(m -> m.setStatus("INACTIVE"));
         return e;
+    }
+
+    public record PinRequest(String pin) {}
+
+    /**
+     * Attendance PIN for workers without a phone: they punch on the site kiosk (or the supervisor's phone)
+     * with employee code + PIN. Setting a PIN also unlocks a locked one.
+     */
+    @PostMapping("/{id}/kiosk-pin")
+    @Transactional
+    public Map<String, Object> setKioskPin(@PathVariable UUID id, @RequestBody PinRequest r) {
+        Authz.requireAny(Perm.HR_WRITE, Perm.ATTENDANCE_ADJUST);
+        Employee e = employees.findById(id).orElseThrow(() -> ApiException.notFound("Employee"));
+        if (!Authz.user().branchAllowed(e.getBranchId())) throw ApiException.notFound("Employee");
+        String pin = r == null ? null : r.pin();
+        if (pin == null || !pin.matches("\\d{4,6}")) throw ApiException.field("pin", "4 to 6 digits");
+        if (pin.chars().distinct().count() == 1 || "0123456789".contains(pin) || "9876543210".contains(pin))
+            throw ApiException.field("pin", "Too easy to guess");
+        e.setAttendancePinHash(encoder.encode(pin));
+        e.setPinFailedCount(0);
+        e.setPinLockedUntil(null);
+        employees.save(e);
+        audit.record("EMPLOYEE_KIOSK_PIN_SET", "Employee", id, Map.of());
+        return Map.of("employeeId", id, "kioskPinSet", true);
     }
 
     public record LoginRequest(String phone, String email, String password) {}

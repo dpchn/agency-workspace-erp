@@ -89,15 +89,14 @@ Cloudflare Tunnel) at `http://<server>:3000`. Only port 3000 needs proxying: the
 
 ## 3. After the first start
 
-1. **Create the first agency.** Open the site → **Create your account** (agency name, state, owner e-mail,
-   password). This creates the agency with default branch, worker types, shift timings and payroll
-   components. If you set `SIGNUP_ENABLED=false`, temporarily set it to `true`, create the agency, then set it back.
-2. **Become platform admin** (to see all agencies, plans, and suspend/restore), once:
-   ```bash
-   docker compose exec db psql -U postgres -d erp -c \
-     "update users set platform_admin = true where email = 'you@yourcompany.com';"
-   ```
-   Sign out and back in. Platform admins get **/platform** (agency list only, no access to agency data).
+1. **Your platform admin login.** Set `PLATFORM_ADMIN_EMAIL` and `PLATFORM_ADMIN_PASSWORD` (10+ characters) in
+   `.env` and restart the backend. The account is created, or an existing user is made platform admin. Sign in:
+   you land on **/platform**, the platform console.
+2. **Onboard agencies** from the console: **Onboard agency** (name, state, GSTIN, owner name/e-mail/mobile, plan,
+   trial or paid, optional limits). You get the owner's login and a **one-time temporary password** to send them;
+   they change it after signing in (key icon, top right). Each agency starts with a default branch, worker types,
+   shift timings and payroll components. Or leave `SIGNUP_ENABLED=true` so agencies can sign up themselves (30-day
+   trial on the Starter plan).
 3. Follow the **setup checklist** in [OPERATIONS_MANUAL.md](OPERATIONS_MANUAL.md#1-first-time-setup-owner).
 
 ---
@@ -126,6 +125,14 @@ cd /opt/erp
 git pull
 docker compose up -d --build           # database migrations run automatically on backend start
 docker compose logs -f backend         # watch for "Started ErpApplication"
+```
+
+**Upgrading from a version before the shift-time fix:** if the backend ran with a non-UTC `TZ` (the default
+`Asia/Kolkata`), rosters it generated have shift times off by the time-zone offset (an 08:00 shift stored as 13:30).
+After upgrading, check and repair duties that haven't started yet. Past, attended and locked duties are never touched:
+```bash
+docker compose exec -T db psql -U postgres -d erp -v dry_run=1 < scripts/fix-shift-times.sql   # report only
+docker compose exec -T db psql -U postgres -d erp -v dry_run=0 < scripts/fix-shift-times.sql   # apply
 ```
 
 ### Logs and health

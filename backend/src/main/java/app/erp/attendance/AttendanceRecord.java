@@ -1,6 +1,7 @@
 package app.erp.attendance;
 
 import app.erp.common.TenantEntity;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
@@ -42,6 +43,11 @@ public class AttendanceRecord extends TenantEntity {
     private String assignmentRole = "REGULAR";
     private String shiftKind = "REGULAR";
     private String[] flags = new String[0];
+    /** How this duty was evidenced: MOBILE, KIOSK, SUPERVISOR, MANUAL (union over its events). */
+    private String[] sources = new String[0];
+    /** Users who recorded its punches; they may not approve it themselves. */
+    @JsonIgnore
+    private UUID[] markedBy = new UUID[0];
     private UUID approvedBy;
     private Instant approvedAt;
     private UUID payrollRunId;

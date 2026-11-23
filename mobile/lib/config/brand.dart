@@ -15,7 +15,7 @@ class Brand {
   /// Default server (web app URL; it proxies /v1 to the backend). Users can change it on the login screen.
   static const defaultServer = String.fromEnvironment('API_URL', defaultValue: '');
 
-  /// Ask for a selfie at check-in (only its SHA-256 hash is sent; the photo stays on the phone).
+  /// Ask for a selfie at check-in. Online, the photo is uploaded as evidence; offline, only its SHA-256 hash is sent.
   static const selfieAtCheckIn = bool.fromEnvironment('SELFIE_AT_CHECKIN', defaultValue: false);
 }
 

@@ -35,4 +35,7 @@ public class AttendanceEvent extends TenantEntity {
     private String[] flags = new String[0];
     private String status = "ACCEPTED";
     private UUID recordedBy;
+    private UUID photoId;
+    /** Roll-call / register batch this event belongs to. */
+    private UUID batchId;
 }

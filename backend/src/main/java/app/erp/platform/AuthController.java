@@ -27,6 +27,7 @@ public class AuthController {
     private final JwtService jwt;
     private final JwtEncoder jwtEncoder;
     private final TokenRevocationValidator revocation;
+    @org.springframework.beans.factory.annotation.Autowired private app.erp.common.AppProperties props;
 
     public AuthController(UserRepository users, MembershipRepository memberships, TenantRepository tenants,
                           PasswordEncoder encoder, JwtService jwt, JwtEncoder jwtEncoder, TokenRevocationValidator revocation) {
@@ -138,6 +139,9 @@ public class AuthController {
             Tenant t = tenants.findById(m.getTenantId()).orElseThrow();
             if ("SUSPENDED".equals(t.getStatus()) || "CLOSED".equals(t.getStatus()))
                 throw new ApiException(HttpStatus.FORBIDDEN, "TENANT_SUSPENDED", "This organisation's account is suspended");
+            if (t.trialExpired())
+                throw new ApiException(HttpStatus.FORBIDDEN, "TRIAL_EXPIRED", "The free trial has ended. Contact "
+                        + props.brand().supportEmail() + " to activate your account");
         }
         var claims = new JwtService.TokenClaims(u.getId(), u.getFullName(), u.getTokenEpoch(), u.isPlatformAdmin(),
                 m == null ? null : m.getTenantId(), m == null ? null : m.getId(), m == null ? null : m.getRole(),

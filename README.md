@@ -15,6 +15,7 @@ invoices always reconcile however often people move.
 
 | Guide | For | What's inside |
 |---|---|---|
+| **[Feature guides with videos](docs/guides/README.md)** | Everyone | 19 step-by-step guides (platform onboarding to payroll, guard and supervisor app), each with screenshots and a captioned video |
 | **[Operations manual](docs/OPERATIONS_MANUAL.md)** | Agency staff | How to use every feature, step by step, per role (web + Android) |
 | **[User guide & screenshots](docs/USER_GUIDE.md)** | Everyone | Which app each person uses, a typical month, screenshots |
 | **[Deployment guide](docs/DEPLOYMENT.md)** | Whoever runs the server | Local run, production with HTTPS, backups, upgrades, Android releases, troubleshooting |
@@ -59,7 +60,8 @@ Or click **Create your account** on the login page to register your own agency.
 | Owner, HR, operations, finance | **Web app** (laptop; also works on phones) |
 | Guards | **Android app**: GPS check-in/out that works offline, duties, attendance, payslips, leave, incidents |
 | Supervisors in the field | **Android app**: today's posts and gaps, find/replace a guard, mark attendance, approvals, incidents |
-| Clients (society / mall managers) | **Web portal**: guards on duty today, invoices, statement, incidents |
+| Workers without a phone | **Site kiosk**: a tablet at the gate (`/kiosk` or the Android app) or the supervisor's phone. Tap your name, enter your PIN, a photo is taken |
+| Clients (society / mall managers) | **Web portal**: guards on duty today, monthly attendance to confirm or dispute, invoices, statement, incidents |
 | You (SaaS owner) | **Platform console** in the web app: agencies, plans, suspend/restore |
 
 The Android APK is built automatically by GitHub Actions: **Releases → "Android app (latest)" → `app-release.apk`**.
@@ -74,7 +76,7 @@ The Android APK is built automatically by GitHub Actions: **Releases → "Androi
 | Clients | Clients, sites with geofence (enforce / flag / off), posts, shift requirements |
 | Contracts | Versioned, effective-dated rate cards; 6 billing models; minimum guarantee, extra-shift and OT rates, absence penalties; approval |
 | Deployment & roster | Permanent / temporary / reliever postings, transfers with history, auto-roster, replacement finder, mid-shift handover, double duty, extra shifts, no double-booking, rest-interval rule |
-| Attendance | GPS check-in/out, geofence, fraud flags, offline sync, automatic no-show marking, corrections with approval, muster roll |
+| Attendance | GPS check-in/out, geofence, fraud flags, offline sync, automatic no-show marking, corrections with approval, muster roll. **Staff without a phone**: site kiosk (code + PIN + photo), supervisor team roll-call with photo, paper-register entry with photo. Proxy marking always needs a second approver. Client confirms or disputes monthly attendance, and a dispute holds the invoice |
 | Leave | Apply / approve; releases rostered duties for replacement |
 | Payroll | Per-duty pay across sites, configurable PF/ESI/PT, advances/bonus, versioned runs, lock, arrears, bank CSV, payslips |
 | Billing | Contract-driven invoices, uncovered-duty deductions, GST (CGST/SGST vs IGST), approval, financial-year numbering, credit notes, supplementary invoices, receipts, aging, statements, printable invoice |
@@ -98,14 +100,16 @@ docker-compose.yml        local stack     docker-compose.prod.yml   HTTPS overri
 
 ```bash
 cd backend && mvn test                         # payroll, billing and pay-rate unit tests (golden scenarios)
-python3 scripts/e2e_scenario.py                # full month of business against a running backend (50 checks)
+python3 scripts/e2e_scenario.py                # full month of business against a running backend (80+ checks)
 cd mobile && flutter test                      # app unit/widget tests
 flutter test test/live_backend_test.dart --dart-define=SERVER=http://localhost:8080   # app against demo data
 ```
 
 The end-to-end script covers two agencies, two clients in different states, a guard transferred mid-month, a
 replacement, an uncovered no-show, a client-requested extra shift, a contract rate revision, maker-checker
-approvals, payroll, invoices, a payment and isolation checks.
+approvals, payroll, invoices, a payment and isolation checks. It also covers staff without a phone: a gate kiosk with
+PIN lockout and wrong-site punches, a supervisor roll-call with photo, a paper-register entry, the proxy-marking
+maker-checker, photo privacy, and a client dispute that holds the invoice until resolved.
 
 ## Rebranding
 

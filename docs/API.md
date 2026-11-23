@@ -49,6 +49,21 @@ else's change (you get 409 if it moved on).
 device-generated `clientEventId` (UUID). Events already received come back with `"duplicate": true`, so retries
 are always safe.
 
+**Attendance without a phone.** Upload photo evidence first (`POST /v1/attendance/photos` with
+`{kind: SELFIE|TEAM|REGISTER|PROFILE, contentType, dataBase64, siteId?, employeeId?}`, up to 1.5 MB), then pass
+the returned `id` as `photoId`:
+
+* **Kiosk** `POST /v1/attendance/kiosk/punch` `{clientEventId, employeeCode | employeeId, pin, kind, occurredAt,
+  latitude?, longitude?, accuracyM?, deviceId, photoId, offline?}`. The PIN is checked on the server (wrong PIN: 400 on
+  `pin`; locked: 422). Offline kiosks replay through `/kiosk/punch/batch`.
+* **Roll-call** `POST /v1/attendance/roll-call` `{batchId, siteId, kind, occurredAt, assignmentIds[], photoId,
+  latitude?, longitude?, accuracyM?, deviceId?}` returns `{marked, rejected, results[]}`. Per-person event ids are
+  derived from `batchId`, so replaying a roll-call is safe.
+* **Register entry** `POST /v1/attendance/register-entry` `{siteId, date, photoId, note?, entries:[{assignmentId,
+  status, checkInAt?, checkOutAt?}]}` creates one correction request per line (`batchId` groups them).
+* Attendance records carry `sources` (`MOBILE`, `KIOSK`, `SUPERVISOR`, `MANUAL`). An approval by someone who marked
+  the duty for someone else is skipped with a reason.
+
 ## Endpoints
 
 ### Attendance
@@ -65,6 +80,18 @@ are always safe.
 | POST | `/v1/attendance/adjustments/{id}/decision` | required |
 | POST | `/v1/attendance/finalize` |  |
 | GET | `/v1/attendance/muster` |  |
+| GET | `/v1/attendance/sheet?siteId&date` |  |
+| POST | `/v1/attendance/roll-call` | required |
+| POST | `/v1/attendance/register-entry` | required |
+| POST | `/v1/attendance/adjustments/decisions` | required |
+| GET | `/v1/attendance/kiosk/duties` |  |
+| POST | `/v1/attendance/kiosk/punch` | required |
+| POST | `/v1/attendance/kiosk/punch/batch` |  |
+| POST | `/v1/attendance/photos` |  |
+| GET | `/v1/attendance/photos/{id}` |  |
+| GET | `/v1/attendance/signoffs?month` |  |
+| POST | `/v1/attendance/signoffs/{id}/resolve` |  |
+| POST | `/v1/employees/{id}/kiosk-pin` |  |
 | GET | `/v1/leaves` |  |
 | POST | `/v1/leaves` |  |
 | POST | `/v1/leaves/{id}/decision` |  |
@@ -234,6 +261,8 @@ are always safe.
 | GET | `/v1/me/attendance` |  |
 | GET | `/v1/me/payslips` |  |
 | GET | `/v1/portal/summary` |  |
+| GET | `/v1/portal/attendance?month&siteId` |  |
+| POST | `/v1/portal/attendance/signoff` |  |
 
 ### Roster
 

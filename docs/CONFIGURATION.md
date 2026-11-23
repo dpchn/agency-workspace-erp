@@ -20,7 +20,8 @@ There are three layers of configuration:
 | `POSTGRES_PASSWORD` | `postgres` | **yes** | Database superuser password. |
 | `DB_OWNER_PASSWORD` | `erp_owner` | **yes** | Password of `erp_owner` (runs migrations, owns tables). |
 | `DB_APP_PASSWORD` | `erp_app` | **yes** | Password of `erp_app` (runtime role; row-level security applies to it). |
-| `SIGNUP_ENABLED` | `true` | – | `true`: any agency can sign up on the login page. `false`: closed; you create agencies yourself. |
+| `SIGNUP_ENABLED` | `true` | – | `true`: any agency can sign up on the login page. `false`: closed; you onboard agencies from the platform console. |
+| `PLATFORM_ADMIN_EMAIL` / `PLATFORM_ADMIN_PASSWORD` | empty | – | Your own platform-console login, created at backend start (password 10+ characters). An existing user is only flagged, their password is not changed. |
 | `TRIAL_DAYS` | `30` | – | Trial length for new agencies. |
 | `ACCESS_TOKEN_MINUTES` | `720` | – | How long a sign-in lasts (12 h). Guards on long shifts may want `1440`. |
 | `JOBS_ENABLED` | `true` | – | Background jobs (see below). Keep `true` on exactly one backend instance. |
@@ -97,6 +98,11 @@ Name, legal name, GSTIN, **state code** (decides CGST+SGST vs IGST on invoices),
 | `fullDayMinPercent` | `75` | Worked % of the shift needed for a full duty |
 | `halfDayMinPercent` | `40` | Worked % for a half duty (below this the duty is absent) |
 | `autoApproveCleanAttendance` | `true` | Duties with no flags and no lateness approve themselves at check-out |
+| `autoApproveSources` | `MOBILE, KIOSK` | Which ways of marking may approve themselves. `SUPERVISOR` (roll-call / proxy) and `MANUAL` (paper register) are left out by default, so a second person always checks them |
+| `kioskPhotoRequired` | `true` | A site kiosk takes a photo with every punch |
+| `rollCallPhotoRequired` | `true` | A supervisor roll-call needs a photo of the team |
+| `pinMaxAttempts` / `pinLockMinutes` | `5` / `15` | Wrong kiosk PINs before that person's PIN locks, and for how long |
+| `blockInvoiceOnDispute` | `true` | A client's open attendance dispute for a month blocks issuing that month's invoice |
 | `checkInWindowMinutes` | `120` | How early or late a punch may be and still match a rostered duty |
 | `lateSubmissionHours` | `6` | Offline punches uploaded later than this are flagged |
 | `maxAccuracyMeters` | `100` | GPS readings less accurate than this are flagged |
@@ -136,6 +142,9 @@ Each user has **one role per agency**. They can optionally be limited to some **
 
 | Capability | Owner | HR | Operations | Supervisor | Finance | Auditor | Client admin / viewer | Guard |
 |---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| Kiosk punch (code + PIN), kiosk mode | ✔ | | ✔ | ✔ | | | | |
+| Set an employee's kiosk PIN | ✔ | ✔ | ✔ | ✔ | | | | |
+| Confirm / dispute monthly attendance | | | | | | | admin only | |
 | Organisation settings, branding, policies | ✔ | | | | | | | |
 | Users & roles | ✔ | ✔ | | | | | | |
 | Masters (branches, service types, shifts, holidays) | edit | view | edit | view | view | view | | |
@@ -153,6 +162,9 @@ Each user has **one role per agency**. They can optionally be limited to some **
 | Incidents | manage | | manage | manage | | view | report + view shared | report |
 | Reports (dashboard, margin, trail) | ✔ | ✔ | ✔ | | ✔ | ✔ | | |
 | Audit log | ✔ | | | | | ✔ | | |
+
+**Site device (kiosk)** (`SITE_KIOSK`) is a role with a single permission: punch people at its own site(s) with
+code + PIN + photo. It must be limited to at least one site and can read nothing else.
 
 The platform operator (you, running the SaaS) is a separate flag on a user. They see the list of agencies and
 their plans, but no agency's HR or finance data.

@@ -10,6 +10,9 @@ import { Form } from "@/components/Form";
 import { useToast } from "@/components/Toast";
 import { opts, useBranches, useServiceTypes, useSites } from "@/lib/lookups";
 import { employeeFields } from "../fields";
+import { AuthImage } from "@/components/AuthImage";
+import { fileToJpeg, uploadPhoto } from "@/lib/photo";
+import { fmtDateTime } from "@/lib/format";
 
 const DOCS = ["POLICE_VERIFICATION", "ID_PROOF", "ADDRESS_PROOF", "TRAINING", "ARMS_LICENSE", "MEDICAL"];
 
@@ -22,13 +25,15 @@ export default function EmployeeDetail() {
   const ready = useApi<any>(`/v1/employees/${id}/readiness`);
   const deps = useApi<any[]>(can("ROSTER_READ") ? `/v1/deployments?employeeId=${id}` : null);
   const branches = useBranches(), st = useServiceTypes(), sites = useSites();
-  const [modal, setModal] = useState<null | "edit" | "doc" | "login" | "exit" | "suspend">(null);
+  const [modal, setModal] = useState<null | "edit" | "doc" | "login" | "exit" | "suspend" | "pin">(null);
 
   if (emp.loading && !emp.data) return <Loading />;
   if (emp.error) return <ErrorBox error={emp.error} />;
   const e = emp.data;
   const reloadAll = () => { emp.reload(); docs.reload(); ready.reload(); deps.reload(); };
   const act = (path: string, body: any = {}) => async () => { await api.post(`/v1/employees/${id}/${path}`, body); reloadAll(); };
+  const canPin = can("HR_WRITE") || can("ATTENDANCE_ADJUST");
+  const pinLocked = e.pinLockedUntil && new Date(e.pinLockedUntil).getTime() > Date.now();
 
   return (
     <div className="space-y-4">
@@ -53,6 +58,39 @@ export default function EmployeeDetail() {
           {e.userId && <span className="ml-2 text-slate-500">· has mobile app login</span>}
         </div>
       )}
+
+      <div className="card flex flex-wrap items-center gap-4">
+        <AuthImage id={e.profilePhotoId} className="h-20 w-20" alt={`${e.firstName} photo`} />
+        <div className="min-w-[220px] flex-1 space-y-1 text-sm">
+          <div className="font-medium">Attendance</div>
+          <div>{e.hasSmartphone === false
+            ? <>No smartphone — punches on the <b>site kiosk</b> with code <b>{e.employeeCode}</b> + PIN, or is marked by the supervisor's roll-call.</>
+            : <>Uses own phone (guard app){e.userId ? "" : " — no app login yet"}. Can also use the site kiosk with a PIN.</>}</div>
+          <div className="flex flex-wrap items-center gap-2">
+            Kiosk PIN: {e.kioskPinSet ? <Badge value={pinLocked ? "LOCKED" : "ACTIVE"} /> : <span className="text-amber-700">not set</span>}
+            {pinLocked && <span className="text-xs text-red-600">locked until {fmtDateTime(e.pinLockedUntil)} after wrong attempts (setting a new PIN unlocks)</span>}
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {can("HR_WRITE") && (
+            <ActionButton success="Saved" onClick={async () => { await api.patch(`/v1/employees/${id}`, { hasSmartphone: e.hasSmartphone === false, version: e.version }); emp.reload(); }}>
+              {e.hasSmartphone === false ? "Has a smartphone now" : "Mark as no smartphone"}
+            </ActionButton>
+          )}
+          {canPin && <button className="btn-secondary" onClick={() => setModal("pin")}>{e.kioskPinSet ? "Reset kiosk PIN" : "Set kiosk PIN"}</button>}
+          {(can("HR_WRITE") || can("ATTENDANCE_MARK")) && (
+            <label className="btn-secondary cursor-pointer">{e.profilePhotoId ? "Change photo" : "Add photo"}
+              <input type="file" accept="image/*" capture="user" className="hidden" onChange={async (ev) => {
+                const f = ev.target.files?.[0];
+                ev.target.value = "";
+                if (!f) return;
+                try { await uploadPhoto("PROFILE", await fileToJpeg(f, 480), { employeeId: id }); toast.ok("Photo saved"); emp.reload(); }
+                catch (err: any) { toast.err(err?.message ?? "Upload failed"); }
+              }} />
+            </label>
+          )}
+        </div>
+      </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="card">
@@ -115,6 +153,11 @@ export default function EmployeeDetail() {
           { name: "password", label: "Initial password (min 6)", type: "password", required: true },
         ]} onCancel={() => setModal(null)}
           onSubmit={async (v) => { const r = await api.post(`/v1/employees/${id}/create-login`, v); toast.ok(`Login created: ${r.login}`); setModal(null); reloadAll(); }} />
+      </Modal>
+      <Modal open={modal === "pin"} title="Kiosk PIN" onClose={() => setModal(null)}>
+        <p className="mb-3 text-sm text-slate-600">4–6 digits. Tell it to the worker privately; it is stored encrypted and cannot be shown again. Setting a PIN also unlocks a locked one.</p>
+        <Form fields={[{ name: "pin", label: "New PIN", type: "password", required: true, placeholder: "e.g. 4821" }]} onCancel={() => setModal(null)} submitLabel="Save PIN"
+          onSubmit={async (v) => { await api.post(`/v1/employees/${id}/kiosk-pin`, { pin: v.pin }); toast.ok("Kiosk PIN saved"); setModal(null); emp.reload(); }} />
       </Modal>
       <Modal open={modal === "exit"} title="Exit employee" onClose={() => setModal(null)}>
         <p className="mb-3 text-sm text-slate-600">Ends deployments, cancels future duties and disables the app login. Final settlement is paid in the next payroll run.</p>

@@ -24,6 +24,7 @@ String errorText(Object e) => e is ApiException ? e.toString() : 'Something went
 
 Color statusColor(String s) {
   switch (s) {
+    case 'ON_DUTY':
     case 'PRESENT':
     case 'APPROVED':
     case 'ACCEPTED':

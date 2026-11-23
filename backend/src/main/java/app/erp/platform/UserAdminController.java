@@ -22,6 +22,7 @@ public class UserAdminController {
     private final PasswordEncoder encoder;
     private final AuditService audit;
     private final TokenRevocationValidator revocation;
+    @org.springframework.beans.factory.annotation.Autowired private TenantRepository tenants;
 
     public UserAdminController(UserRepository users, MembershipRepository memberships, PasswordEncoder encoder,
                                AuditService audit, TokenRevocationValidator revocation) {
@@ -55,6 +56,15 @@ public class UserAdminController {
         if ((r.role() == Role.CLIENT_ADMIN || r.role() == Role.CLIENT_VIEWER) && r.clientId() == null)
             throw ApiException.field("clientId", "Client users must be linked to a client");
         if (r.role() == Role.GUARD && r.employeeId() == null) throw ApiException.field("employeeId", "Guard users must be linked to an employee");
+        if (r.role() == Role.SITE_KIOSK && (r.siteIds() == null || r.siteIds().length == 0))
+            throw ApiException.field("siteIds", "A site device must be limited to its site(s)");
+        if (PlatformController.STAFF_ROLES.contains(r.role().name())) {
+            Integer max = tenants.findById(tenant).map(Tenant::getMaxUsers).orElse(null);
+            long staff = memberships.findByTenantId(tenant).stream()
+                    .filter(x -> "ACTIVE".equals(x.getStatus()) && PlatformController.STAFF_ROLES.contains(x.getRole().name())).count();
+            if (max != null && staff >= max)
+                throw ApiException.invalidState("Your plan allows " + max + " office users (guards and clients are unlimited). Ask us to upgrade");
+        }
         if ((r.email() == null || r.email().isBlank()) && (r.phone() == null || r.phone().isBlank()))
             throw ApiException.field("email", "E-mail or phone required");
 
@@ -118,6 +128,28 @@ public class UserAdminController {
         terminateSessions(find(membershipId).getUserId());
         audit.record("USER_SESSIONS_TERMINATED", "Membership", membershipId, Map.of());
         return Map.of("status", "SESSIONS_REVOKED");
+    }
+
+    /**
+     * Forgotten password: sets a one-time temporary password (returned once) and signs the person out everywhere.
+     * Only owners may reset an owner. Someone who also belongs to another agency can't be reset from here,
+     * because the password is shared across agencies.
+     */
+    @PostMapping("/{membershipId}/reset-password")
+    @Transactional
+    public Map<String, Object> resetPassword(@PathVariable UUID membershipId) {
+        Authz.require(Perm.USER_MANAGE);
+        Membership m = find(membershipId);
+        if (m.getUserId().equals(Authz.userId())) throw ApiException.invalidState("Use Change password for your own account");
+        if (m.getRole() == Role.OWNER && Authz.user().role() != Role.OWNER) throw ApiException.forbidden("Only owners can reset an owner's password");
+        User u = users.findById(m.getUserId()).orElseThrow();
+        if (u.isPlatformAdmin() || memberships.findByUserIdAndStatus(u.getId(), "ACTIVE").stream().anyMatch(x -> !x.getTenantId().equals(m.getTenantId())))
+            throw ApiException.invalidState("This person also uses another organisation; they must reset it themselves");
+        String temp = SignupService.temporaryPassword();
+        u.setPasswordHash(encoder.encode(temp));
+        terminateSessions(u.getId());
+        audit.record("USER_PASSWORD_RESET", "Membership", m.getId(), Map.of());
+        return Map.of("login", u.getEmail() != null ? u.getEmail() : u.getPhone(), "temporaryPassword", temp);
     }
 
     private void terminateSessions(UUID userId) {

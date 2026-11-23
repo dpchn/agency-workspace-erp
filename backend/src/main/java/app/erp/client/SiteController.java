@@ -49,5 +49,12 @@ public class SiteController extends CrudSupport<Site> {
         if ("ENFORCE".equals(e.getGeofencePolicy()) && (e.getLatitude() == null || e.getLongitude() == null))
             throw ApiException.field("latitude", "Coordinates required to enforce geofence");
         if (e.getTimezone() != null) java.time.ZoneId.of(e.getTimezone());
+        if (isNew) {
+            Integer max = tenantService.current().getMaxSites();
+            Long active = jdbc.queryForObject("select count(*) from sites where status = 'ACTIVE'", Long.class);
+            if (max != null && active != null && active >= max)
+                throw ApiException.invalidState("Your plan allows " + max + " sites. Ask us to upgrade your plan");
+        }
     }
+    @org.springframework.beans.factory.annotation.Autowired private app.erp.platform.TenantService tenantService;
 }

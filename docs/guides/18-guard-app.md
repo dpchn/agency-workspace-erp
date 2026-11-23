@@ -1,0 +1,78 @@
+# 18 · Guard app: check in, attendance, payslips, leave, incidents
+
+**Who:** guards and housekeeping staff with a smartphone. **Where:** the Android app (or `/guard` in the phone's browser).
+
+▶ Video: [18-guard-app.mp4](videos/18-guard-app.mp4)
+
+## What it's for
+
+A guard's whole working life on one phone: where to report today, check in and out at the site, see their own
+attendance and payslips, apply for leave and report incidents. Workers **without** a phone don't need it; see
+[10-no-phone-attendance](10-no-phone-attendance.md) and [19-supervisor-app](19-supervisor-app.md).
+
+## Before you start
+
+* The office has created the guard's **app login** (Employees → person → *Create app login*, mobile number + password). See [06-employees](06-employees.md).
+* The guard is **rostered** for today ([08-roster](08-roster.md)).
+* The APK is installed (your office sends the link: GitHub **Releases → "Android app (latest)"**). The **server
+  address** is filled in already, or the office tells you what to type the first time.
+* Allow **location** (and **camera** if your agency asks for a check-in selfie) when the app asks.
+
+## Steps
+
+1. **Sign in** with your **mobile number** and **password**.
+
+   ![Sign in](img/18-login.png)
+
+2. **Duty** tab: today's and upcoming duties. Each card shows the **site**, **post**, date and **shift time**.
+   At the site, tap **Check in**. The app takes your GPS position (and, if your agency asks, a selfie) and sends it.
+   * **Accepted / Flagged**: recorded. A flag (e.g. weak GPS) only means a supervisor will look at it.
+   * **Rejected**: at a strict site you are outside the boundary; move to the gate and try again.
+   * **No network**: "Saved on this phone"; it is sent automatically when the network is back.
+3. The card now shows **In hh:mm** and **ON DUTY**. At the end of the shift tap **Check out**.
+
+   ![On duty](img/18-on-duty.png)
+
+4. **Attendance** tab: your month, day by day, with site, in/out times, status (present / half day / absent / leave)
+   and whether it is approved.
+5. **Payslips** tab: each locked month with net pay. Tap one for details: **duties per site** (a guard who worked at
+   two sites sees two lines, each at that site's rate), deductions (PF, ESI, professional tax), employer
+   contributions and the bank account (masked).
+
+   ![Payslips](img/18-payslips.png) ![Payslip detail](img/18-payslip-detail.png)
+
+6. **Leave** tab: **Apply leave**, choose the type (**CASUAL**, **SICK**, **EARNED**, **UNPAID**), dates and a reason,
+   **Submit**. The decision appears in the list. Approved leave frees your rostered duties so someone else can be put
+   in ([12-leave](12-leave.md)).
+7. **Incidents** tab: **Report incident**, choose the site, severity (**Low**, **Med**, **High**, **Critical**), a
+   title and what happened, then **Send**. The supervisor and office see it at once ([13-incidents](13-incidents.md)).
+
+## What the system does for you
+
+* **Finds your duty**: a punch is matched to the rostered duty within the check-in window (2 hours by default).
+  You don't choose the shift.
+* **Checks the place**: GPS distance to the site is stored. At an **ENFORCE** site a punch from outside the
+  boundary is refused; at a **FLAG** site it is accepted and flagged.
+* **Catches cheating without punishing honest mistakes**: low GPS accuracy, impossible travel speed, the same phone
+  used by two guards, wrong phone clock and late uploads are **flagged for review**, never auto-penalised.
+* **Works offline**: punches keep their real time and location and are de-duplicated when they sync.
+* **Lateness, overtime, half/full day** are worked out from the times, using your agency's policy.
+* **Pay follows the site**: each duty is paid at the rate of the site where you worked that day.
+
+## Common situations
+
+* **"Check-in rejected: you are 300 m from the site."** Walk to the gate and try again. If GPS is poor indoors,
+  step outside. Still failing? Tell the supervisor; they can mark you with a team photo.
+* **Forgot to check in / phone died.** The supervisor or office raises a correction with a reason; another person
+  approves it. Your original punches are never changed.
+* **No network at the site.** Check in anyway: "Saved on this phone". It syncs later. Very late uploads are flagged
+  for a quick review, not rejected.
+* **Two shifts in one day (double duty).** Both appear on the Duty tab; check in and out of each.
+* **I don't see my payslip.** Payslips appear when the office **locks** that month's payroll.
+* **New phone.** Install the app, sign in again. The office can **Sign out everywhere** for a lost phone.
+
+## Related
+
+[06-employees](06-employees.md) · [08-roster](08-roster.md) · [09-attendance-approval](09-attendance-approval.md) ·
+[10-no-phone-attendance](10-no-phone-attendance.md) · [12-leave](12-leave.md) · [13-incidents](13-incidents.md) ·
+[14-payroll](14-payroll.md) · [19-supervisor-app](19-supervisor-app.md)

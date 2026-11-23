@@ -16,6 +16,7 @@ public class OutboxService {
     public static final String INCIDENT_RAISED = "IncidentRaised";
     public static final String INCIDENT_ESCALATED = "IncidentEscalated";
     public static final String SHIFT_UNCOVERED = "ShiftUncovered";
+    public static final String ATTENDANCE_DISPUTED = "AttendanceDisputed";
 
     private final JdbcTemplate jdbc;
     private final ObjectMapper mapper;

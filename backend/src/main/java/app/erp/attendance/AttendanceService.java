@@ -13,7 +13,11 @@ import app.erp.security.Perm;
 import java.math.BigDecimal;
 import java.time.*;
 import java.util.*;
+import app.erp.hr.Employee;
+import app.erp.hr.EmployeeRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,6 +38,8 @@ public class AttendanceService {
     private final AuditService audit;
     private final OutboxService outbox;
     private final JdbcTemplate jdbc;
+    @Autowired private EmployeeRepository employees;
+    @Autowired private PasswordEncoder encoder;
 
     public AttendanceService(AttendanceEventRepository events, AttendanceRecordRepository records,
                              AttendanceAdjustmentRepository adjustments, AssignmentRepository assignments, ShiftRepository shifts,
@@ -54,7 +60,7 @@ public class AttendanceService {
 
     public record EventRequest(UUID clientEventId, UUID employeeId, UUID assignmentId, String kind, Instant occurredAt,
                                Double latitude, Double longitude, Double accuracyM, String deviceId, String selfieHash,
-                               Boolean offline) {}
+                               Boolean offline, UUID photoId) {}
 
     public record EventResult(UUID clientEventId, UUID eventId, String status, List<String> flags, UUID assignmentId,
                               UUID recordId, String recordStatus, boolean duplicate, String message) {}
@@ -90,17 +96,37 @@ public class AttendanceService {
             source = "SUPERVISOR";
         }
 
+        return record(req, employeeId, source, null);
+    }
+
+    /**
+     * Stores one punch for a resolved employee. {@code source} says how it was evidenced:
+     * MOBILE (own phone), KIOSK (shared site device + PIN), SUPERVISOR (marked by a supervisor).
+     * Site-scoped markers can only mark duties at their own sites.
+     */
+    EventResult record(EventRequest req, UUID employeeId, String source, UUID batchId) {
+        var u = Authz.user();
         TenantSettings st = tenantService.settings();
         Instant received = Instant.now();
         List<String> flags = new ArrayList<>();
+        boolean selfMarked = "MOBILE".equals(source);
         if (req.occurredAt().isAfter(received.plus(Duration.ofMinutes(5)))) flags.add("CLOCK_SKEW");
         if (Duration.between(req.occurredAt(), received).toHours() >= st.integer("lateSubmissionHours")) flags.add("LATE_SUBMISSION");
         if (req.accuracyM() != null && req.accuracyM() > st.integer("maxAccuracyMeters")) flags.add("LOW_ACCURACY");
-        if (req.latitude() == null && "MOBILE".equals(source)) flags.add("NO_LOCATION");
+        if (req.latitude() == null && selfMarked) flags.add("NO_LOCATION");
+        if (req.photoId() != null && !photoExists(req.photoId())) throw ApiException.field("photoId", "Unknown photo");
 
         Assignment a = req.assignmentId() != null ? assignments.findById(req.assignmentId()).orElse(null) : match(employeeId, req.kind(), req.occurredAt(), st);
         if (a != null && !a.getEmployeeId().equals(employeeId)) throw ApiException.notFound("Assignment");
         if (a != null && Set.of("CANCELLED").contains(a.getStatus())) a = null;
+        if (a != null && !selfMarked) {
+            Shift sh = shifts.findById(a.getShiftId()).orElseThrow();
+            if (!u.siteAllowed(sh.getSiteId())) {
+                if (req.assignmentId() != null) throw ApiException.notFound("Assignment");
+                a = null;
+                flags.add("WRONG_SITE");
+            }
+        }
 
         AttendanceEvent ev = new AttendanceEvent();
         ev.setClientEventId(req.clientEventId());
@@ -116,15 +142,18 @@ public class AttendanceService {
         ev.setOffline(Boolean.TRUE.equals(req.offline()));
         ev.setSource(source);
         ev.setRecordedBy(u.userId());
+        ev.setPhotoId(req.photoId());
+        ev.setBatchId(batchId);
 
         String status = "ACCEPTED";
         String message = null;
         Shift shift = null;
         Site site = null;
         if (a == null) {
-            flags.add("NO_ASSIGNMENT");
+            if (!flags.contains("WRONG_SITE")) flags.add("NO_ASSIGNMENT");
             status = "FLAGGED";
-            message = "No rostered duty found for this time; supervisor will review";
+            message = flags.contains("WRONG_SITE") ? "This person has no duty at this site now; supervisor will review"
+                    : "No rostered duty found for this time; supervisor will review";
         } else {
             shift = shifts.findById(a.getShiftId()).orElseThrow();
             site = sites.findById(shift.getSiteId()).orElseThrow();
@@ -135,12 +164,12 @@ public class AttendanceService {
                 double tolerance = site.getGeofenceRadiusM() + (req.accuracyM() == null ? 0 : Math.min(req.accuracyM(), 50));
                 if (dist > tolerance) {
                     flags.add("OUTSIDE_GEOFENCE");
-                    if ("ENFORCE".equals(site.getGeofencePolicy()) && "MOBILE".equals(source)) {
+                    if ("ENFORCE".equals(site.getGeofencePolicy()) && (selfMarked || "KIOSK".equals(source))) {
                         status = "REJECTED";
                         message = "You are " + Math.round(dist) + " m from the site; move inside the site boundary and retry";
                     }
                 }
-            } else if ("ENFORCE".equals(site.getGeofencePolicy()) && req.latitude() == null && "MOBILE".equals(source)) {
+            } else if ("ENFORCE".equals(site.getGeofencePolicy()) && req.latitude() == null && selfMarked) {
                 status = "REJECTED";
                 message = "Location is required at this site";
             }
@@ -150,7 +179,7 @@ public class AttendanceService {
                         where device_id = ? and employee_id <> ? and occurred_at between ? and ?""", Integer.class,
                         req.deviceId(), employeeId, java.sql.Timestamp.from(req.occurredAt().minus(Duration.ofHours(12))),
                         java.sql.Timestamp.from(req.occurredAt().plus(Duration.ofHours(12))));
-                if (others != null && others > 0 && "MOBILE".equals(source)) flags.add("DEVICE_SHARED");
+                if (others != null && others > 0 && selfMarked) flags.add("DEVICE_SHARED");
             }
             impossibleTravel(employeeId, req, st).ifPresent(flags::add);
         }
@@ -176,6 +205,8 @@ public class AttendanceService {
                     else flags.add("CHECKOUT_WITHOUT_CHECKIN");
                 }
                 rec.setFlags(merge(rec.getFlags(), flags));
+                rec.setSources(merge(rec.getSources(), List.of(source)));
+                rec.setMarkedBy(mergeIds(rec.getMarkedBy(), u.userId()));
                 recompute(rec, a, shift, st);
                 records.saveAndFlush(rec);
                 roster.refreshShiftStatus(shift.getId());
@@ -183,6 +214,140 @@ public class AttendanceService {
         }
         return new EventResult(ev.getClientEventId(), ev.getId(), ev.getStatus(), List.of(ev.getFlags()), ev.getAssignmentId(),
                 rec == null ? null : rec.getId(), rec == null ? null : rec.getStatus(), false, message);
+    }
+
+    // ------------------------------------------------------------------ workers without a phone
+
+    public record KioskPunch(UUID clientEventId, String employeeCode, UUID employeeId, String pin, String kind, Instant occurredAt,
+                             Double latitude, Double longitude, Double accuracyM, String deviceId, UUID photoId, Boolean offline) {}
+
+    /**
+     * Step 1 of a kiosk punch: checks the worker's PIN. Runs in its own transaction that is NOT rolled
+     * back on a wrong PIN, so failed attempts are counted and the PIN locks after too many.
+     */
+    @Transactional(noRollbackFor = ApiException.class)
+    public UUID verifyPin(KioskPunch p) {
+        Authz.require(Perm.ATTENDANCE_KIOSK);
+        TenantSettings st = tenantService.settings();
+        Employee e = null;
+        if (p.employeeId() != null) e = employees.findById(p.employeeId()).orElse(null);
+        else if (p.employeeCode() != null && !p.employeeCode().isBlank())
+            e = employees.findOne((r, q, cb) -> cb.equal(cb.upper(r.get("employeeCode")), p.employeeCode().trim().toUpperCase())).orElse(null);
+        if (e == null) throw ApiException.field("employeeCode", "Unknown employee code");
+        if (!"ACTIVE".equals(e.getStatus())) throw ApiException.invalidState(e.fullName() + " is not active");
+        if (e.getAttendancePinHash() == null) throw ApiException.invalidState("No attendance PIN set for " + e.fullName() + "; ask the office to set one");
+        Instant now = Instant.now();
+        if (e.getPinLockedUntil() != null && e.getPinLockedUntil().isAfter(now))
+            throw ApiException.invalidState("PIN locked after wrong attempts. Try after "
+                    + Math.max(1, Duration.between(now, e.getPinLockedUntil()).toMinutes() + 1) + " min, or ask your supervisor to mark you");
+        if (p.pin() == null || !encoder.matches(p.pin(), e.getAttendancePinHash())) {
+            int failed = (e.getPinFailedCount() == null ? 0 : e.getPinFailedCount()) + 1;
+            e.setPinFailedCount(failed);
+            if (failed >= st.integer("pinMaxAttempts")) {
+                e.setPinFailedCount(0);
+                e.setPinLockedUntil(now.plus(Duration.ofMinutes(st.integer("pinLockMinutes"))));
+                audit.record("ATTENDANCE_PIN_LOCKED", "Employee", e.getId(), Map.of("deviceId", String.valueOf(p.deviceId())));
+            }
+            employees.saveAndFlush(e);
+            throw ApiException.field("pin", "Wrong PIN");
+        }
+        if (e.getPinFailedCount() != null && e.getPinFailedCount() > 0 || e.getPinLockedUntil() != null) {
+            e.setPinFailedCount(0);
+            e.setPinLockedUntil(null);
+        }
+        return e.getId();
+    }
+
+    /** Step 2: the punch itself, evidenced by PIN (+ photo) on a shared site device. */
+    @Transactional
+    public EventResult kioskPunch(KioskPunch p, UUID employeeId) {
+        Authz.require(Perm.ATTENDANCE_KIOSK);
+        if (p.clientEventId() == null) throw ApiException.field("clientEventId", "Device-generated UUID required");
+        if (p.photoId() == null && tenantService.settings().bool("kioskPhotoRequired"))
+            throw ApiException.field("photoId", "Photo required at the kiosk");
+        var req = new EventRequest(p.clientEventId(), employeeId, null, p.kind(), p.occurredAt(), p.latitude(), p.longitude(),
+                p.accuracyM(), p.deviceId(), null, p.offline(), p.photoId());
+        validate(req);
+        Optional<EventResult> dup = duplicate(req.clientEventId());
+        return dup.orElseGet(() -> record(req, employeeId, "KIOSK", null));
+    }
+
+    public Optional<EventResult> duplicate(UUID clientEventId) {
+        return events.findByClientEventId(clientEventId).map(e -> {
+            AttendanceRecord r = e.getAssignmentId() == null ? null : records.findByAssignmentId(e.getAssignmentId()).orElse(null);
+            return new EventResult(e.getClientEventId(), e.getId(), e.getStatus(), List.of(e.getFlags()), e.getAssignmentId(),
+                    r == null ? null : r.getId(), r == null ? null : r.getStatus(), true, "Already received");
+        });
+    }
+
+    private static void validate(EventRequest req) {
+        if (!Set.of("CHECK_IN", "CHECK_OUT").contains(String.valueOf(req.kind()))) throw ApiException.field("kind", "CHECK_IN or CHECK_OUT");
+        if (req.occurredAt() == null) throw ApiException.field("occurredAt", "Required");
+    }
+
+    public record RollCallRequest(UUID batchId, UUID siteId, String kind, Instant occurredAt, List<UUID> assignmentIds, UUID photoId,
+                                  Double latitude, Double longitude, Double accuracyM, String deviceId, Boolean offline) {}
+
+    /** Validates a supervisor roll-call (a group photo + location marks the whole team in one go). */
+    public void checkRollCall(RollCallRequest r) {
+        Authz.require(Perm.ATTENDANCE_MARK);
+        if (r.batchId() == null) throw ApiException.field("batchId", "Device-generated UUID required");
+        if (r.siteId() == null) throw ApiException.field("siteId", "Required");
+        Authz.requireSite(r.siteId(), "Site");
+        if (r.assignmentIds() == null || r.assignmentIds().isEmpty()) throw ApiException.field("assignmentIds", "Select at least one person");
+        if (r.assignmentIds().size() > 200) throw ApiException.field("assignmentIds", "Max 200 per roll-call");
+        if (r.photoId() == null && tenantService.settings().bool("rollCallPhotoRequired"))
+            throw ApiException.field("photoId", "Take a photo of the team on duty");
+        if (r.photoId() != null && !photoExists(r.photoId())) throw ApiException.field("photoId", "Unknown photo");
+        validate(new EventRequest(r.batchId(), null, null, r.kind(), r.occurredAt(), null, null, null, null, null, null, null));
+    }
+
+    /** One person of a roll-call, in its own transaction so one failure does not undo the rest. */
+    @Transactional
+    public EventResult rollCallOne(RollCallRequest r, UUID assignmentId) {
+        Assignment a = assignments.findById(assignmentId).orElseThrow(() -> ApiException.notFound("Assignment"));
+        Shift sh = shifts.findById(a.getShiftId()).orElseThrow();
+        if (!sh.getSiteId().equals(r.siteId())) throw ApiException.field("assignmentIds", "Duty is not at this site");
+        UUID cid = UUID.nameUUIDFromBytes((r.batchId() + ":" + assignmentId + ":" + r.kind()).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        var req = new EventRequest(cid, a.getEmployeeId(), a.getId(), r.kind(), r.occurredAt(), r.latitude(), r.longitude(), r.accuracyM(),
+                r.deviceId(), null, r.offline(), r.photoId());
+        return duplicate(cid).orElseGet(() -> record(req, a.getEmployeeId(), "SUPERVISOR", r.batchId()));
+    }
+
+    public record RegisterLine(UUID assignmentId, String status, Instant checkInAt, Instant checkOutAt) {}
+
+    public record RegisterRequest(UUID siteId, LocalDate date, UUID photoId, String note, List<RegisterLine> entries) {}
+
+    /**
+     * Office entry from a paper attendance register (workers with no phone and no kiosk). Every line becomes
+     * a correction request with the register photo as evidence; a different person approves them.
+     */
+    @Transactional
+    public Map<String, Object> registerEntry(RegisterRequest r) {
+        Authz.require(Perm.ATTENDANCE_ADJUST);
+        if (r.siteId() == null) throw ApiException.field("siteId", "Required");
+        if (r.date() == null) throw ApiException.field("date", "Required");
+        Authz.requireSite(r.siteId(), "Site");
+        if (r.photoId() == null || !photoExists(r.photoId())) throw ApiException.field("photoId", "Attach a photo of the signed register page");
+        if (r.entries() == null || r.entries().isEmpty()) throw ApiException.field("entries", "Nothing to submit");
+        UUID batch = UUID.randomUUID();
+        List<UUID> ids = new ArrayList<>();
+        for (RegisterLine l : r.entries()) {
+            if (l.status() == null) throw ApiException.field("entries", "Status required for every line");
+            Assignment a = assignments.findById(l.assignmentId()).orElseThrow(() -> ApiException.notFound("Assignment"));
+            Shift sh = shifts.findById(a.getShiftId()).orElseThrow();
+            if (!sh.getSiteId().equals(r.siteId()) || !sh.getDutyDate().equals(r.date()))
+                throw ApiException.field("entries", "Duty is not at this site on " + r.date());
+            Instant in = l.checkInAt(), out = l.checkOutAt();
+            if ("PRESENT".equals(l.status()) && in == null && out == null) { in = a.getStartAt(); out = a.getEndAt(); }
+            String reason = "Register entry" + (r.note() == null || r.note().isBlank() ? "" : ": " + r.note());
+            AttendanceAdjustment adj = requestAdjustment(new AdjustmentRequest(null, a.getId(), in, out, l.status(), reason, "photo:" + r.photoId()));
+            adj.setPhotoId(r.photoId());
+            adj.setBatchId(batch);
+            ids.add(adj.getId());
+        }
+        audit.record("ATTENDANCE_REGISTER_ENTRY", "Site", r.siteId(), Map.of("date", r.date().toString(), "lines", ids.size(), "batchId", batch));
+        return Map.of("batchId", batch, "adjustmentIds", ids, "count", ids.size());
     }
 
     /** Finds the duty an event belongs to: overlapping window first, then nearest start within the allowed window. */
@@ -281,7 +446,7 @@ public class AttendanceService {
         r.setBillUnits(Boolean.TRUE.equals(r.getBillable()) && r.getPayUnits().signum() > 0
                 ? share.multiply(r.getPayUnits()).setScale(2, java.math.RoundingMode.HALF_UP) : BigDecimal.ZERO);
         if (st.bool("autoApproveCleanAttendance") && (r.getFlags() == null || r.getFlags().length == 0)
-                && "PENDING".equals(r.getApprovalStatus()) && r.getLateMinutes() == 0) {
+                && "PENDING".equals(r.getApprovalStatus()) && r.getLateMinutes() == 0 && trustedSources(r, st)) {
             r.setApprovalStatus("APPROVED");
             r.setApprovedAt(Instant.now());
             outbox.publish(OutboxService.ATTENDANCE_APPROVED, r.getAssignmentId(), Map.of("employeeId", r.getEmployeeId().toString()));
@@ -341,6 +506,7 @@ public class AttendanceService {
             if (r == null || !Authz.user().siteAllowed(r.getSiteId())) { skipped.add(id + ": not found"); continue; }
             if (r.getPayrollRunId() != null || r.getInvoiceId() != null) { skipped.add(id + ": locked"); continue; }
             if ("PENDING".equals(r.getStatus())) { skipped.add(id + ": duty not complete"); continue; }
+            if ("APPROVED".equals(req.decision()) && markedByMe(r)) { skipped.add(id + ": you marked this duty; another person must approve it"); continue; }
             r.setApprovalStatus(req.decision());
             r.setApprovedBy(Authz.userId());
             r.setApprovedAt(Instant.now());
@@ -384,8 +550,8 @@ public class AttendanceService {
         adj.setEvidenceKey(req.evidenceKey());
         adj.setRequestedBy(Authz.userId());
         Map<String, Object> before = new HashMap<>();
-        before.put("checkInAt", String.valueOf(rec.getCheckInAt()));
-        before.put("checkOutAt", String.valueOf(rec.getCheckOutAt()));
+        before.put("checkInAt", rec.getCheckInAt() == null ? null : rec.getCheckInAt().toString());
+        before.put("checkOutAt", rec.getCheckOutAt() == null ? null : rec.getCheckOutAt().toString());
         before.put("status", rec.getStatus());
         before.put("approvalStatus", rec.getApprovalStatus());
         adj.setBeforeState(before);
@@ -419,6 +585,7 @@ public class AttendanceService {
         if (adj.getProposedCheckInAt() != null) rec.setCheckInAt(adj.getProposedCheckInAt());
         if (adj.getProposedCheckOutAt() != null) rec.setCheckOutAt(adj.getProposedCheckOutAt());
         rec.setFlags(merge(rec.getFlags(), List.of("ADJUSTED")));
+        if (adj.getBatchId() != null) rec.setSources(merge(rec.getSources(), List.of("MANUAL")));
         rec.setApprovalStatus("PENDING");
         recompute(rec, a, s, st);
         if (adj.getProposedStatus() != null) {
@@ -442,6 +609,31 @@ public class AttendanceService {
                 Map.of("checkInAt", String.valueOf(rec.getCheckInAt()), "checkOutAt", String.valueOf(rec.getCheckOutAt()), "status", rec.getStatus()),
                 Map.of("adjustmentId", adj.getId()));
         return adj;
+    }
+
+    /** Auto-approval only when every way this duty was marked is trusted (default: own phone, site kiosk). */
+    static boolean trustedSources(AttendanceRecord r, TenantSettings st) {
+        List<String> trusted = st.list("autoApproveSources");
+        return r.getSources() == null || Arrays.stream(r.getSources()).allMatch(trusted::contains);
+    }
+
+    /** Maker-checker: whoever punched a duty for someone else may not also approve it. */
+    private boolean markedByMe(AttendanceRecord r) {
+        if (!tenantService.settings().bool("requireApprovalSeparation") || r.getMarkedBy() == null) return false;
+        UUID me = Authz.userId();
+        boolean proxyMarked = r.getSources() != null && Arrays.stream(r.getSources()).anyMatch(x -> !"MOBILE".equals(x));
+        return proxyMarked && Arrays.asList(r.getMarkedBy()).contains(me);
+    }
+
+    boolean photoExists(UUID id) {
+        Integer n = jdbc.queryForObject("select count(*) from attendance_photos where id = ?", Integer.class, id);
+        return n != null && n > 0;
+    }
+
+    static UUID[] mergeIds(UUID[] existing, UUID add) {
+        LinkedHashSet<UUID> s = new LinkedHashSet<>(existing == null ? List.of() : List.of(existing));
+        if (add != null) s.add(add);
+        return s.toArray(UUID[]::new);
     }
 
     static String[] merge(String[] existing, List<String> add) {

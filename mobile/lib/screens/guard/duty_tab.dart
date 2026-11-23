@@ -93,7 +93,8 @@ class _DutyCard extends StatelessWidget {
     final inAt = duty['check_in_at'];
     final outAt = duty['check_out_at'];
     final current = start != null && end != null && now.isAfter(start.subtract(const Duration(hours: 2))) && now.isBefore(end.add(const Duration(hours: 2)));
-    final status = '${duty['attendance_status'] ?? duty['status']}';
+    // Checked in but not out yet: the record is still "pending", which reads oddly to a guard on duty.
+    final status = inAt != null && outAt == null ? 'ON_DUTY' : '${duty['attendance_status'] ?? duty['status']}';
     return Card(
       elevation: current ? 2 : 0,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: current ? Theme.of(context).colorScheme.primary : Colors.grey.shade300)),

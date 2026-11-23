@@ -29,4 +29,6 @@ public class AttendanceAdjustment extends TenantEntity {
     private UUID decidedBy;
     private Instant decidedAt;
     private String decisionNote;
+    private UUID photoId;
+    private UUID batchId;
 }
