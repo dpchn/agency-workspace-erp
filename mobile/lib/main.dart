@@ -102,6 +102,8 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _index = 0;
+  // bumped each time a tab is opened, so its screen reloads (e.g. roll-call after kiosk punches)
+  final Map<int, int> _visits = {};
 
   List<_TabDef> _tabs() {
     final s = widget.session;
@@ -182,12 +184,17 @@ class _HomeScreenState extends State<HomeScreen> {
               padding: const EdgeInsets.all(32),
               child: Center(child: Text(tr('not_for_role'), textAlign: TextAlign.center)),
             )
-          : IndexedStack(index: _index.clamp(0, tabs.length - 1), children: tabs.map((t) => t.body).toList()),
+          : IndexedStack(index: _index.clamp(0, tabs.length - 1), children: [
+                  for (var i = 0; i < tabs.length; i++) KeyedSubtree(key: ValueKey('tab-$i-${_visits[i] ?? 0}'), child: tabs[i].body),
+                ]),
       bottomNavigationBar: tabs.length < 2
           ? null
           : NavigationBar(
               selectedIndex: _index.clamp(0, tabs.length - 1),
-              onDestinationSelected: (i) => setState(() => _index = i),
+              onDestinationSelected: (i) => setState(() {
+                if (i != _index) _visits[i] = (_visits[i] ?? 0) + 1;
+                _index = i;
+              }),
               labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
               destinations: tabs.map((t) => NavigationDestination(icon: Icon(t.icon), label: t.label)).toList(),
             ),

@@ -29,23 +29,26 @@ sites only ever sees and marks those sites.
    ![Today](img/19-today.png)
 
 2. **Roll-call** tab: mark the whole team at once.
-   1. Pick the **site** (and day). Choose **Mark IN** or **Mark OUT**.
-   2. Tick the people present (**Select all** picks everyone who can be marked that way). People without a phone are
-      marked with an icon; people already in show how (e.g. *In 08:34 PM · via mobile*). Pull down to refresh.
-   3. Tap **Team photo & mark N IN**: take one photo of the team. The app sends the photo, your GPS and the list.
-   4. A result shows per person (**ACCEPTED**, or why not, e.g. a duty at another site).
+   1. Pick the **site** (and day) and **Coming in** or **Going out**.
+   2. Everyone whose shift is **on now** and who isn't marked yet is **already ticked**; untick anyone who isn't there.
+      People already in show how (e.g. *In 07:48 AM · via mobile*). People with a later shift can't be ticked yet.
+   3. Tap **Mark all present (N)**: the rear camera takes one team photo by itself (3-2-1). The app sends the photo,
+      your GPS and the list.
+   4. A full-screen result, then per person (**ACCEPTED**, or why not, e.g. not this duty's time).
 
-   ![Roll-call](img/19-rollcall.png) ![Roll-call result](img/19-rollcall-result.png)
+   ![Roll-call](img/19-rollcall.png)
 
 3. **Kiosk mode** (tablet icon, top right): hand your phone to a worker without a phone.
-   1. The worker taps their **name** (or **Enter my employee code**).
-   2. Enters their **PIN** on the big keypad, then **Next: photo**: the camera takes their picture.
+   1. The worker taps their **name** (big tile with a green **IN** / orange **OUT** chip), or **Type my employee code**.
+   2. Types their **PIN** on the big keypad: it sends itself after the last digit. The front camera then takes their
+      photo by itself (3-2-1).
    3. A full-screen result: **green** recorded, **amber** recorded but flagged, **red** not recorded with the reason
       (e.g. **Wrong PIN**). It returns to the list by itself.
    4. The phone's Back button does nothing in kiosk mode. To leave, **hold the lock icon** and type **your own
-      password**. A wrong password keeps the phone in kiosk mode.
+      password** (if you sign in by SMS code, an SMS code is sent to your number instead). A wrong password keeps
+      the phone in kiosk mode.
 
-   ![Kiosk list](img/19-kiosk-list.png) ![PIN](img/19-kiosk-pin.png) ![Wrong PIN](img/19-kiosk-wrong-pin.png)
+   ![Kiosk list](img/19-kiosk-list.png) ![PIN](img/19-kiosk-pin.png)
    ![Leave kiosk mode](img/19-kiosk-exit.png)
 
 4. **My duty** tab (if you are also an employee): your own check-in, like the guard app.
@@ -73,8 +76,8 @@ sites only ever sees and marks those sites.
 * **"Wrong PIN" for the right person.** Check they tapped their own name; after 5 tries wait 15 minutes or reset the PIN.
 * **No network at the site.** Do the roll-call / kiosk punches anyway; they show as waiting and sync later.
 * **I marked someone by mistake.** Tell the office: they reject that duty or correct it with a reason (another person approves).
-* **The camera opens the rear camera in kiosk mode.** Some phone camera apps ignore the front-camera request; switch
-  cameras in the camera screen. The photo is stored either way.
+* **"Not this duty's time".** A person can only be marked from 2 hours before their shift starts until it ends (and
+  marked out until 2 hours after it ends), so nobody is marked present for a later shift by mistake.
 
 ## Related
 

@@ -40,6 +40,10 @@ void main() {
   test('roll-call only offers people who can be marked', () {
     expect(rollCallEligible({}, 'CHECK_IN'), isTrue);
     expect(rollCallEligible({}, 'CHECK_OUT'), isFalse);
+    // not marked present for a duty that only starts tonight
+    final night = {'startAt': '2026-11-24T14:30:00Z', 'endAt': '2026-11-25T02:30:00Z'};
+    expect(rollCallEligible(night, 'CHECK_IN', now: DateTime.utc(2026, 11, 24, 8, 21)), isFalse);
+    expect(rollCallEligible(night, 'CHECK_IN', now: DateTime.utc(2026, 11, 24, 13, 0)), isTrue);
     expect(rollCallEligible({'checkInAt': 'x'}, 'CHECK_IN'), isFalse);
     expect(rollCallEligible({'checkInAt': 'x'}, 'CHECK_OUT'), isTrue);
     expect(rollCallEligible({'checkInAt': 'x', 'checkOutAt': 'y'}, 'CHECK_OUT'), isFalse);

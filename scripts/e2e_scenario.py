@@ -451,6 +451,9 @@ check(code == 400, "roll-call without a team photo refused")
 rc["photoId"] = photo(ops_t, "TEAM", siteA["id"])
 res = call("POST", "/v1/attendance/roll-call", rc, ops_t, idem=True)
 check(res["marked"] == 1 and res["rejected"] == 1, "roll-call marks the Site A team; a Site B duty in the list is rejected")
+later = [r for r in call("GET", f"/v1/attendance/sheet?siteId={siteA['id']}&date=2026-11-05", token=ops_t) if r["employeeCode"] == "G3"][0]
+early = call("POST", "/v1/attendance/roll-call", {**rc, "batchId": str(uuid.uuid4()), "assignmentIds": [later["assignmentId"]]}, ops_t, idem=True)
+check(early["marked"] == 0 and "OUTSIDE_SHIFT_TIME" in early["results"][0]["flags"], "roll-call cannot mark someone present for a later shift")
 again_rc = call("POST", "/v1/attendance/roll-call", rc, ops_t, idem=True)
 check(all(r["duplicate"] for r in again_rc["results"] if r["status"] != "REJECTED"), "roll-call replay is deduplicated")
 call("POST", "/v1/attendance/roll-call", {**rc, "batchId": str(uuid.uuid4()), "kind": "CHECK_OUT", "occurredAt": at(nov3, 20, 0),

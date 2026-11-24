@@ -183,6 +183,20 @@ public class AttendanceService {
             }
             impossibleTravel(employeeId, req, st).ifPresent(flags::add);
         }
+        // A punch naming a specific duty (roll-call, single mark) must fall inside that duty's time window,
+        // so nobody is marked present hours before their shift starts.
+        if (a != null && req.assignmentId() != null && !"REJECTED".equals(status)) {
+            Duration w = Duration.ofMinutes(st.integer("checkInWindowMinutes"));
+            boolean in = "CHECK_IN".equals(req.kind())
+                    ? !req.occurredAt().isBefore(a.getStartAt().minus(w)) && req.occurredAt().isBefore(a.getEndAt())
+                    : req.occurredAt().isAfter(a.getStartAt()) && !req.occurredAt().isAfter(a.getEndAt().plus(w));
+            if (!in) {
+                flags.add("OUTSIDE_SHIFT_TIME");
+                status = "REJECTED";
+                java.time.format.DateTimeFormatter hm = java.time.format.DateTimeFormatter.ofPattern("dd MMM HH:mm").withZone(tenantService.zone());
+                message = "Not this duty's time: it runs " + hm.format(a.getStartAt()) + " to " + hm.format(a.getEndAt());
+            }
+        }
         if ("ACCEPTED".equals(status) && !flags.isEmpty()) status = "FLAGGED";
         ev.setFlags(flags.toArray(String[]::new));
         ev.setStatus(status);

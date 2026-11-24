@@ -220,7 +220,8 @@ public class AttendanceController {
                 where s.duty_date between ? and ? and a.status <> 'CANCELLED' and s.status <> 'CANCELLED'""");
         List<Object> args = new ArrayList<>(List.of(d.minusDays(1), d));
         if (u.siteIds() != null) { sql.append(" and si.id = any(?)"); args.add(u.siteIds().toArray(UUID[]::new)); }
-        sql.append(" and a.end_at > now() - interval '6 hours' order by a.start_at, e.employee_code");
+        // ended duties stay listed for 2 hours (time to check out late), then drop off the gate screen
+        sql.append(" and a.end_at > now() - interval '2 hours' order by a.start_at, e.employee_code");
         List<Map<String, Object>> sitesOut = u.siteIds() == null ? List.of()
                 : jdbc.queryForList("select id, name, latitude, longitude, geofence_radius_m as \"geofenceRadiusM\" from sites where id = any(?) order by name",
                         (Object) u.siteIds().toArray(UUID[]::new));

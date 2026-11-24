@@ -9,10 +9,19 @@ import '../../core/session.dart';
 import '../../widgets/common.dart';
 import '../../widgets/result_screen.dart';
 
-/// Who in a roll-call can be marked for [kind]: not yet in (for IN), in but not out (for OUT).
-bool rollCallEligible(Map<String, dynamic> row, String kind) {
+/// Who in a roll-call can be marked for [kind]: not yet in (for IN), in but not out (for OUT), and only while that
+/// duty is on: from 2 hours before its start (IN) / until 2 hours after its end (OUT). The server checks the same.
+bool rollCallEligible(Map<String, dynamic> row, String kind, {DateTime? now}) {
   if (row['assignmentStatus'] == 'CANCELLED' || row['pendingCorrection'] == true) return false;
-  return kind == 'CHECK_IN' ? row['checkInAt'] == null : row['checkInAt'] != null && row['checkOutAt'] == null;
+  final state = kind == 'CHECK_IN' ? row['checkInAt'] == null : row['checkInAt'] != null && row['checkOutAt'] == null;
+  if (!state) return false;
+  final start = DateTime.tryParse('${row['startAt']}'), end = DateTime.tryParse('${row['endAt']}');
+  if (start == null || end == null) return true;
+  final t = now ?? DateTime.now();
+  const window = Duration(hours: 2);
+  return kind == 'CHECK_IN'
+      ? !t.isBefore(start.subtract(window)) && t.isBefore(end)
+      : t.isAfter(start) && !t.isAfter(end.add(window));
 }
 
 /// Who is selected when a roll-call sheet opens: everyone who can be marked (one tap marks the whole team).
