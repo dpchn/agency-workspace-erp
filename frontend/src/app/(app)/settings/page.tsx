@@ -148,6 +148,9 @@ function Users() {
                       const x = await api.post(`/v1/users/${r.membershipId}/reset-password`);
                       alert(`New temporary password for ${x.login}:\n\n${x.temporaryPassword}\n\nShown only once. Ask them to change it after signing in.`);
                     }}>Reset password</ActionButton>
+                  {r.appPhoneBound && <ActionButton className="btn-ghost" success="They can sign in on the new phone"
+                    confirm={`Allow ${r.name} to sign in on a new phone? Their current phone is signed out.`}
+                    onClick={() => api.post(`/v1/users/${r.membershipId}/allow-new-phone`)}>Allow new phone</ActionButton>}
                 </div>
               ),
             },

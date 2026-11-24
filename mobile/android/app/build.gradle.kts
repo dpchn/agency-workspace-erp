@@ -47,3 +47,9 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // SMS Retriever: reads back the self-sent sign-in SMS without SMS read permissions
+    implementation("com.google.android.gms:play-services-auth-api-phone:18.1.0")
+    implementation("androidx.core:core:1.13.1")
+}

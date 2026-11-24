@@ -8,9 +8,11 @@ import '../../core/l10n.dart';
 import '../../core/otp.dart';
 import '../../core/photos.dart';
 import '../../core/punch.dart';
+import '../../core/self_sms.dart';
 import '../../core/session.dart';
 import '../../widgets/common.dart';
 import '../../widgets/result_screen.dart';
+import '../self_sms_screen.dart';
 
 /// Shared attendance device for workers without a phone: a gate tablet (SITE_KIOSK login) or a
 /// supervisor's phone handed around. Worker taps their name (or types their code), enters their PIN,
@@ -174,7 +176,17 @@ class _KioskScreenState extends State<KioskScreen> {
       builder: (ctx) => StatefulBuilder(builder: (ctx, setD) {
         Future<void> send() async {
           try {
-            await s.sendUnlockCode();
+            final res = await s.sendUnlockCode();
+            // self-SMS mode: check this phone's SIM instead of typing a code, then unlock by itself
+            final self = SelfSms.codeFrom(res);
+            if (self != null && phone != null) {
+              if (!ctx.mounted) return;
+              final got = await SelfSmsScreen.run(ctx, phone, self);
+              if (got == null) return;
+              final ok = await s.checkOwnCode(got);
+              if (ctx.mounted) Navigator.pop(ctx, ok);
+              return;
+            }
             setD(() => sent = true);
             if (ctx.mounted) toast(ctx, tr('code_sent'));
           } catch (e) {

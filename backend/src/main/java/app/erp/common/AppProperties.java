@@ -9,8 +9,9 @@ public record AppProperties(Brand brand, Security security, Signup signup, Jobs 
     public record Security(String jwtSecret, int accessTokenMinutes, String corsOrigins, int mobileTokenDays) {}
     /**
      * OTP delivery. provider: log (writes to the server log; development) | http (GET/POST to httpUrl with {phone},
-     * {otp}, {message} filled in, works with most Indian SMS gateways). devEcho returns the code in the API response:
-     * local testing only, never in production.
+     * {otp}, {message} filled in, works with most Indian SMS gateways) | self (no gateway yet: the app sends the
+     * code by SMS from the phone's own SIM to the typed number and reads it back; weaker, so the number is bound
+     * to the first phone). devEcho returns the code in the API response: local testing only, never in production.
      */
     public record Sms(String provider, String httpUrl, String httpMethod, String httpAuthHeader, boolean devEcho) {}
     public record Signup(boolean enabled, int trialDays) {}

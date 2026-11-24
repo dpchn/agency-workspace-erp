@@ -26,6 +26,7 @@ class Otp {
   static String? errorKey(Object e) {
     if (e is! ApiException) return null;
     if (e.isNetwork) return 'no_network';
+    if (e.code == 'NEW_PHONE') return 'otp_new_phone';
     if (e.status == 403) return 'otp_no_account';
     if (e.code == 'OTP_LIMIT') return 'otp_limit';
     if (e.code == 'OTP_WAIT') return 'otp_wait';

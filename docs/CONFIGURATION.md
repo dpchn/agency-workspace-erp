@@ -25,7 +25,7 @@ There are three layers of configuration:
 | `TRIAL_DAYS` | `30` | – | Trial length for new agencies. |
 | `ACCESS_TOKEN_MINUTES` | `720` | – | How long a web sign-in lasts (12 h). |
 | `MOBILE_TOKEN_DAYS` | `30` | – | How long an app sign-in lasts, so guards don't need a new code every shift. Leaving the agency, deactivation or a password reset still ends it immediately. |
-| `SMS_PROVIDER` | `log` | – | How sign-in codes (OTP) are sent. `log`: only written to the backend log (development). `http`: your SMS gateway (below). |
+| `SMS_PROVIDER` | `log` | – | How sign-in codes (OTP) are sent. `http`: your SMS gateway (below). `self`: **until you have a gateway**, the app sends the code by SMS from the phone's own SIM to the typed number and reads it back; each number is then bound to its first phone, and a new phone needs **Users & roles → Allow new phone**. Weaker than a gateway (the server can't see the SMS) and uses the guard's SMS balance; Google Play doesn't allow it (fine for the APK you share). `log`: only written to the backend log (development). |
 | `SMS_HTTP_URL` | – | with `http` | Gateway URL; `{phone}` (10 digits), `{otp}` and `{message}` are filled in, e.g. `https://sms.example.com/send?key=XXXX&to=91{phone}&text={message}` |
 | `SMS_HTTP_METHOD` / `SMS_HTTP_AUTH_HEADER` | `GET` / – | – | `POST` if your gateway needs it; optional header as `Name: value` (e.g. an API key) |
 | `OTP_DEV_ECHO` | `false` | – | Returns the code in the API response. **Local testing only, never in production.** |

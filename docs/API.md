@@ -69,6 +69,9 @@ answers `{sent: true}` (unknown numbers get no code). Then `POST /v1/auth/otp/ve
 returns the same body as `/v1/auth/login`; `/v1/auth/otp/reset-password {phone, code, newPassword}` sets a new
 password and signs in. Codes: 6 digits, 5 minutes, 5 tries; at most 3 codes per number per 15 minutes, 30 s apart.
 Codes are only sent to active users with an active membership in an active agency (and an active employee record).
+With `SMS_PROVIDER=self` the request response also carries `selfSms: {code}` for the app to send from the phone's own
+SIM; verify then needs `deviceId`, binds the number to that phone, and answers 403 `NEW_PHONE` for another phone until
+`POST /v1/users/{membershipId}/allow-new-phone`.
 
 ## Endpoints
 

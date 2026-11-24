@@ -63,7 +63,8 @@ public class OtpService {
         String code = String.format("%06d", random.nextInt(1_000_000));
         jdbc.update("insert into otp_codes(id, phone, purpose, code_hash, expires_at, sent) values (?,?,?,?,?,?)",
                 UUID.randomUUID(), p, purpose, encoder.encode(code), java.sql.Timestamp.from(Instant.now().plusSeconds(CODE_MINUTES * 60L)), u.isPresent());
-        if (u.isPresent()) {
+        boolean self = selfMode();
+        if (u.isPresent() && !self) {
             String brand = props.brand() == null ? "DutyGrid" : props.brand().name();
             sms.send(p, code, code + " is your " + brand + " " + ("RESET".equals(purpose) ? "password reset" : "login")
                     + " code. Valid " + CODE_MINUTES + " minutes. Do not share it with anyone.");
@@ -72,6 +73,9 @@ public class OtpService {
         out.put("sent", true);   // same answer for unknown numbers
         out.put("expiresInSeconds", CODE_MINUTES * 60);
         if (props.sms() != null && props.sms().devEcho() && u.isPresent()) out.put("devCode", code);
+        // self mode: the app sends this text from the phone's own SIM to the number and reads it back. Unknown
+        // numbers get a code too, so the answer doesn't reveal who is registered.
+        if (self) out.put("selfSms", Map.of("code", code, "message", "DutyGrid code: " + code));
         return out;
     }
 
@@ -86,12 +90,30 @@ public class OtpService {
         if (rows.isEmpty() || !Boolean.TRUE.equals(rows.get(0).get("live"))) throw ApiException.field("code", "Code expired. Ask for a new one");
         var row = rows.get(0);
         if (((Number) row.get("attempts")).intValue() >= MAX_ATTEMPTS) throw ApiException.field("code", "Too many wrong tries. Ask for a new code");
-        if (!Boolean.TRUE.equals(row.get("sent")) || !encoder.matches(code.trim(), (String) row.get("code_hash"))) {
+        if (!encoder.matches(code.trim(), (String) row.get("code_hash")) || (!Boolean.TRUE.equals(row.get("sent")) && !selfMode())) {
             jdbc.update("update otp_codes set attempts = attempts + 1 where id = ?", row.get("id"));
             throw ApiException.field("code", "Wrong code");
         }
         jdbc.update("update otp_codes set consumed_at = now() where id = ?", row.get("id"));
         return eligibleUser(p).orElseThrow(() -> ApiException.forbidden("This number has no active account. Contact your agency"));
+    }
+
+    boolean selfMode() { return props.sms() != null && "self".equals(props.sms().provider()); }
+
+    /**
+     * Self-SMS sign-in can't be proven on the server (the code is on the phone), so the number is bound to the first
+     * phone it signs in on; another phone is refused until the agency allows it (Users & roles → Allow new phone).
+     */
+    public void checkDevice(User u, String deviceId) {
+        if (!selfMode()) return;
+        if (deviceId == null || deviceId.isBlank()) throw ApiException.field("deviceId", "Update the app");
+        if (u.getAppDeviceId() == null) {
+            jdbc.update("update users set app_device_id = ?, app_device_bound_at = now() where id = ?", deviceId, u.getId());
+            u.setAppDeviceId(deviceId);
+        } else if (!u.getAppDeviceId().equals(deviceId)) {
+            throw new ApiException(org.springframework.http.HttpStatus.FORBIDDEN, "NEW_PHONE",
+                    "This number is already used on another phone. Ask your office to allow this phone");
+        }
     }
 
     /** The active user behind this number, if they may use the app now. */

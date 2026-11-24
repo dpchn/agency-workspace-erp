@@ -23,6 +23,9 @@ attendance and payslips, apply for leave and report incidents. Workers **without
 
 1. **Sign in**: the app opens in **English** (tap **हिन्दी** for Hindi). Type your **mobile number**, tap **Send code**,
    and type the **6-digit SMS code**. No password needed; the app stays signed in (30 days by default).
+   *Until your agency has an SMS gateway*, the app instead checks the phone's own SIM: tap **Send code**, allow
+   SMS once, and the app sends itself an SMS and reads it back, with no typing. Your number is then tied to this
+   phone; on a new phone ask the office to **Allow new phone**.
    Office staff can use **Sign in with e-mail / password** instead.
 
    ![Sign in](img/18-login.png) ![Mobile number](img/18-otp-code.png)

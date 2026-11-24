@@ -7,8 +7,10 @@ import '../config/brand.dart';
 import '../core/api.dart';
 import '../core/l10n.dart';
 import '../core/otp.dart';
+import '../core/self_sms.dart';
 import '../core/session.dart';
 import '../widgets/common.dart';
+import 'self_sms_screen.dart';
 
 /// Which step of signing in is on screen.
 enum _Step {
@@ -47,6 +49,9 @@ class _LoginScreenState extends State<LoginScreen> {
   String? _phone10;
   String? _error;
   int _resendIn = 0;
+
+  /// Self-SMS mode (no SMS gateway yet): this phone's SIM was checked and the code is filled in already.
+  bool _selfVerified = false;
   Timer? _timer;
 
   Session get s => widget.session;
@@ -101,9 +106,26 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _sendCode() => _run(() async {
         final p = Otp.normalizePhone(_phone.text);
         if (p == null) throw Exception(tr('phone_invalid'));
-        await s.requestOtp(_server.text, p, purpose: _purpose);
+        final res = await s.requestOtp(_server.text, p, purpose: _purpose);
         _phone10 = p;
         _code.clear();
+        // self-SMS mode: send the code from this phone's SIM, read it back, then sign in by itself
+        final self = SelfSms.codeFrom(res);
+        if (self != null) {
+          if (!mounted) return;
+          final got = await SelfSmsScreen.run(context, p, self);
+          if (got == null || !mounted) return;
+          _code.text = got;
+          if (_purpose == 'RESET') {
+            setState(() {
+              _selfVerified = true;
+              _step = _Step.code;
+            });
+          } else {
+            await s.loginWithOtp(_server.text, p, got);
+          }
+          return;
+        }
         setState(() => _step = _Step.code);
         _startCountdown();
       });
@@ -130,6 +152,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _go(_Step step, {String purpose = 'LOGIN'}) => setState(() {
         _step = step;
+        _selfVerified = false;
         _purpose = purpose;
         _error = null;
         _timer?.cancel();
@@ -236,23 +259,31 @@ class _LoginScreenState extends State<LoginScreen> {
       ];
 
   List<Widget> _codeStep(TextStyle big) => [
-        Text(tr('code_sent_to', {'phone': Otp.display(_phone10 ?? '0000000000')}),
-            textAlign: TextAlign.center, style: const TextStyle(fontSize: 18)),
-        const SizedBox(height: 16),
-        TextField(
-          controller: _code,
-          autofocus: true,
-          keyboardType: TextInputType.number,
-          autofillHints: const [AutofillHints.oneTimeCode],
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(Otp.codeLength)],
-          textAlign: TextAlign.center,
-          style: const TextStyle(fontSize: 38, fontWeight: FontWeight.bold, letterSpacing: 14),
-          decoration: InputDecoration(labelText: tr('code_label'), hintText: '••••••', border: const OutlineInputBorder()),
-          // sign-in goes by itself when the 6th digit is typed; a reset still needs the new password
-          onChanged: (v) {
-            if (_purpose == 'LOGIN' && Otp.codeComplete(v)) _verify();
-          },
-        ),
+        if (_selfVerified)
+          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Icon(Icons.verified, color: Colors.green.shade700, size: 30),
+            const SizedBox(width: 8),
+            Text(Otp.display(_phone10 ?? '0000000000'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          ])
+        else ...[
+          Text(tr('code_sent_to', {'phone': Otp.display(_phone10 ?? '0000000000')}),
+              textAlign: TextAlign.center, style: const TextStyle(fontSize: 18)),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _code,
+            autofocus: true,
+            keyboardType: TextInputType.number,
+            autofillHints: const [AutofillHints.oneTimeCode],
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(Otp.codeLength)],
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 38, fontWeight: FontWeight.bold, letterSpacing: 14),
+            decoration: InputDecoration(labelText: tr('code_label'), hintText: '••••••', border: const OutlineInputBorder()),
+            // sign-in goes by itself when the 6th digit is typed; a reset still needs the new password
+            onChanged: (v) {
+              if (_purpose == 'LOGIN' && Otp.codeComplete(v)) _verify();
+            },
+          ),
+        ],
         if (_purpose == 'RESET') ...[
           const SizedBox(height: 12),
           TextField(
@@ -281,18 +312,19 @@ class _LoginScreenState extends State<LoginScreen> {
             label: tr(_purpose == 'RESET' ? 'save_and_sign_in' : 'sign_in'),
             onPressed: _verify),
         const SizedBox(height: 8),
-        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          TextButton.icon(
-            onPressed: () => _go(_Step.phone, purpose: _purpose),
-            icon: const Icon(Icons.edit),
-            label: Text(tr('change_number'), style: const TextStyle(fontSize: 16)),
-          ),
-          TextButton.icon(
-            onPressed: _resendIn > 0 || _busy ? null : _resend,
-            icon: const Icon(Icons.refresh),
-            label: Text(_resendIn > 0 ? tr('resend_in', {'s': _resendIn}) : tr('resend'), style: const TextStyle(fontSize: 16)),
-          ),
-        ]),
+        if (!_selfVerified)
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            TextButton.icon(
+              onPressed: () => _go(_Step.phone, purpose: _purpose),
+              icon: const Icon(Icons.edit),
+              label: Text(tr('change_number'), style: const TextStyle(fontSize: 16)),
+            ),
+            TextButton.icon(
+              onPressed: _resendIn > 0 || _busy ? null : _resend,
+              icon: const Icon(Icons.refresh),
+              label: Text(_resendIn > 0 ? tr('resend_in', {'s': _resendIn}) : tr('resend'), style: const TextStyle(fontSize: 16)),
+            ),
+          ]),
       ];
 
   List<Widget> _passwordStep() => [

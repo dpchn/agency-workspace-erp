@@ -135,23 +135,25 @@ public class AuthController {
         return otp.request(r.phone(), r.purpose() == null ? "LOGIN" : r.purpose());
     }
 
-    public record OtpVerify(String phone, String code, UUID tenantId, Boolean mobile) {}
+    public record OtpVerify(String phone, String code, UUID tenantId, Boolean mobile, String deviceId) {}
 
     @PostMapping("/auth/otp/verify")
     public LoginResponse otpVerify(@RequestBody OtpVerify r) {
         User u = otp.verify(r.phone(), r.code(), "LOGIN");
+        otp.checkDevice(u, r.deviceId());
         u.setLastLoginAt(Instant.now());
         users.save(u);
         return issueFor(u, r.tenantId(), !Boolean.FALSE.equals(r.mobile()));
     }
 
-    public record OtpReset(String phone, String code, String newPassword, Boolean mobile) {}
+    public record OtpReset(String phone, String code, String newPassword, Boolean mobile, String deviceId) {}
 
     /** Forgot password: SMS code, then a new password. Signs out every other device. */
     @PostMapping("/auth/otp/reset-password")
     public LoginResponse otpReset(@RequestBody OtpReset r) {
         if (r.newPassword() == null || r.newPassword().length() < 8) throw ApiException.field("newPassword", "Minimum 8 characters");
         User u = otp.verify(r.phone(), r.code(), "RESET");
+        otp.checkDevice(u, r.deviceId());
         u.setPasswordHash(encoder.encode(r.newPassword()));
         u.setTokenEpoch(u.getTokenEpoch() + 1);
         u.setLastLoginAt(Instant.now());

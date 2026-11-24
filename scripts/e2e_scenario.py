@@ -541,17 +541,27 @@ g4_phone = f"7{RUN_D}444444"   # G4 (the demo guard G3 keeps working)
 call("POST", f"/v1/employees/{G['G4']}/create-login", {"phone": g4_phone, "password": "guard123"}, owner)
 r0 = call("POST", "/v1/auth/otp/request", {"phone": "9999999999"})
 check(r0["sent"] is True and "devCode" not in r0, "unknown number gets the same answer, but no code is sent (no self-registration)")
+if "selfSms" in r0:
+    code, _ = call("POST", "/v1/auth/otp/verify", {"phone": "9999999999", "code": r0["selfSms"]["code"], "deviceId": "X"}, expect=403, raw=True)
+    check(code == 403, "self-SMS mode: an unregistered number still cannot sign in")
+def otp_code(resp):
+    return resp.get("devCode") or (resp.get("selfSms") or {}).get("code")
+
+
 r1 = call("POST", "/v1/auth/otp/request", {"phone": "+91 " + g4_phone})
+SELF = "selfSms" in r1
+if SELF:
+    r1["devCode"] = r1["selfSms"]["code"]
 if "devCode" in r1:
     code, _ = call("POST", "/v1/auth/otp/verify", {"phone": g4_phone, "code": "000000" if r1["devCode"] != "000000" else "111111"}, expect=400, raw=True)
     check(code == 400, "wrong OTP refused")
-    tok = call("POST", "/v1/auth/otp/verify", {"phone": g4_phone, "code": r1["devCode"], "mobile": True})["accessToken"]
+    tok = call("POST", "/v1/auth/otp/verify", {"phone": g4_phone, "code": r1["devCode"], "mobile": True, "deviceId": "PHONE-A"})["accessToken"]
     check(call("GET", "/v1/me", token=tok)["role"] == "GUARD", "guard signed in with mobile number + OTP")
     code, _ = call("POST", "/v1/auth/otp/request", {"phone": g4_phone}, expect=429, raw=True)
     check(code == 429, "asking for another code within 30 s is refused")
     time.sleep(31)
     rr = call("POST", "/v1/auth/otp/request", {"phone": g4_phone, "purpose": "RESET"})
-    call("POST", "/v1/auth/otp/reset-password", {"phone": g4_phone, "code": rr["devCode"], "newPassword": "newguard123"})
+    call("POST", "/v1/auth/otp/reset-password", {"phone": g4_phone, "code": otp_code(rr), "newPassword": "newguard123", "deviceId": "PHONE-A"})
     check(call("POST", "/v1/auth/login", {"login": g4_phone, "password": "newguard123"})["accessToken"], "forgot password: reset with an SMS code")
     code, _ = call("GET", "/v1/me", token=tok, expect=401, raw=True)
     check(code == 401, "resetting the password signs out other devices")
@@ -563,7 +573,29 @@ if "devCode" in r1:
     check(code == 403, "guard who left cannot sign in")
     time.sleep(31)
     r2 = call("POST", "/v1/auth/otp/request", {"phone": g4_phone, "purpose": "RESET"})
-    check("devCode" not in r2, "guard who left gets no OTP and cannot reset the password")
+    if SELF:
+        code, _ = call("POST", "/v1/auth/otp/reset-password", {"phone": g4_phone, "code": otp_code(r2), "newPassword": "x1234567",
+                                                              "deviceId": "PHONE-A"}, expect=403, raw=True)
+        check(code == 403, "guard who left cannot sign in or reset the password (self-SMS mode)")
+    else:
+        check("devCode" not in r2, "guard who left gets no OTP and cannot reset the password")
+    if SELF:
+        step("Self-SMS mode: a number is bound to its first phone; another phone needs the office")
+        g1_phone = f"7{RUN_D}111111"
+        call("POST", f"/v1/employees/{G['G1']}/create-login", {"phone": g1_phone, "password": "guard123"}, owner)
+        a = call("POST", "/v1/auth/otp/request", {"phone": g1_phone})
+        call("POST", "/v1/auth/otp/verify", {"phone": g1_phone, "code": otp_code(a), "deviceId": "G1-PHONE"})
+        time.sleep(31)
+        b = call("POST", "/v1/auth/otp/request", {"phone": g1_phone})
+        code, body = call("POST", "/v1/auth/otp/verify", {"phone": g1_phone, "code": otp_code(b), "deviceId": "FRIENDS-PHONE"}, expect=403, raw=True)
+        check(code == 403 and "NEW_PHONE" in body, "sign-in for the same number from another phone is refused")
+        m1 = [x for x in call("GET", "/v1/users", token=owner) if x.get("phone") == g1_phone][0]
+        check(m1["appPhoneBound"] is True, "office sees the number is bound to a phone")
+        call("POST", f"/v1/users/{m1['membershipId']}/allow-new-phone", {}, owner)
+        time.sleep(31)
+        c = call("POST", "/v1/auth/otp/request", {"phone": g1_phone})
+        check(call("POST", "/v1/auth/otp/verify", {"phone": g1_phone, "code": otp_code(c), "deviceId": "NEW-PHONE"})["accessToken"],
+              "after the office allows it, the new phone signs in")
 else:
     print("  SKIP  OTP checks need OTP_DEV_ECHO=true on a local server")
 

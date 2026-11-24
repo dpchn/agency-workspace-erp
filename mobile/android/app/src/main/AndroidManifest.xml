@@ -5,6 +5,12 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <!-- Self-SMS sign-in (SMS_PROVIDER=self, until an SMS gateway is connected): the app texts a code from this
+         phone's SIM to the typed number and reads it back via SMS Retriever (no READ/RECEIVE_SMS permission).
+         NOTE: Google Play does not allow SEND_SMS for apps that aren't the default SMS app; remove this permission
+         (and use a gateway) before publishing on Play. Sideloaded APKs (GitHub Releases) are fine. -->
+    <uses-permission android:name="android.permission.SEND_SMS" />
+    <uses-feature android:name="android.hardware.telephony" android:required="false" />
     <application
         android:label="@string/app_name"
         android:usesCleartextTraffic="true"

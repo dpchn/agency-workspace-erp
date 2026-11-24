@@ -34,7 +34,7 @@ public class UserAdminController {
     }
 
     public record MemberView(UUID membershipId, UUID userId, String name, String email, String phone, Role role, String status,
-                             UUID[] branchIds, UUID[] siteIds, UUID clientId, UUID employeeId) {}
+                             UUID[] branchIds, UUID[] siteIds, UUID clientId, UUID employeeId, boolean appPhoneBound) {}
 
     @GetMapping
     @Transactional(readOnly = true)
@@ -152,6 +152,20 @@ public class UserAdminController {
         return Map.of("login", u.getEmail() != null ? u.getEmail() : u.getPhone(), "temporaryPassword", temp);
     }
 
+    /** Self-SMS sign-in binds a number to one phone; this lets the person sign in on a new phone once. */
+    @PostMapping("/{membershipId}/allow-new-phone")
+    @Transactional
+    public Map<String, Object> allowNewPhone(@PathVariable UUID membershipId) {
+        Authz.require(Perm.USER_MANAGE);
+        Membership m = find(membershipId);
+        User u = users.findById(m.getUserId()).orElseThrow();
+        u.setAppDeviceId(null);
+        u.setAppDeviceBoundAt(null);
+        terminateSessions(u.getId());
+        audit.record("USER_APP_PHONE_RESET", "Membership", m.getId(), Map.of());
+        return Map.of("status", "NEW_PHONE_ALLOWED");
+    }
+
     private void terminateSessions(UUID userId) {
         users.findById(userId).ifPresent(u -> u.setTokenEpoch(u.getTokenEpoch() + 1));
         revocation.evict(userId);
@@ -164,7 +178,7 @@ public class UserAdminController {
     private MemberView view(Membership m) {
         User u = users.findById(m.getUserId()).orElseThrow();
         return new MemberView(m.getId(), u.getId(), u.getFullName(), u.getEmail(), u.getPhone(), m.getRole(), m.getStatus(),
-                m.getBranchIds(), m.getSiteIds(), m.getClientId(), m.getEmployeeId());
+                m.getBranchIds(), m.getSiteIds(), m.getClientId(), m.getEmployeeId(), u.getAppDeviceId() != null);
     }
 
     private static String randomPassword() {

@@ -315,6 +315,10 @@ password?** (SMS code) if needed.
   sign in, get a code or reset a password, until the agency reinstates them.
 * **Forgot password / lost phone:** sign in again with an SMS code, or the office uses **Users & roles → Reset
   password** / **Sign out everywhere**.
+* **No SMS gateway yet (`SMS_PROVIDER=self`):** after **Send code**, the app sends one normal SMS from the phone's
+  own SIM to that number and reads it back automatically. Android asks once for permission to send SMS. The first
+  phone a number signs in on is remembered; signing in on another phone shows "already set up on another phone"
+  until the office clicks **Users & roles → Allow new phone** (new phone, lost phone, SIM moved).
 
 | Tab | Use |
 |---|---|

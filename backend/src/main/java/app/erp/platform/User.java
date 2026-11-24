@@ -22,4 +22,7 @@ public class User extends BaseEntity {
     @JsonIgnore
     private int tokenEpoch;
     private Instant lastLoginAt;
+    /** Phone a self-SMS sign-in is bound to (see OtpService); null = not bound yet. */
+    private String appDeviceId;
+    private java.time.Instant appDeviceBoundAt;
 }

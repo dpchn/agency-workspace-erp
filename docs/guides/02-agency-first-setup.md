@@ -67,6 +67,8 @@ business rules, add office staff and site devices, and check the ready-made mast
 * **Your night shift is 19:00–07:00.** Masters → Shift templates → New.
 * **What are the policy defaults?** Every field shows its current value; the defaults are listed in
   [CONFIGURATION.md](../CONFIGURATION.md#business-policies-tab). Change only what differs for your agency.
+* **A guard got a new phone (self-SMS sign-in).** **Users & roles → Allow new phone** on their row; their old phone
+  is signed out.
 * **A staff member or guard forgot their password.** **Users & roles → Reset password** on their row shows a
   one-time password and signs them out everywhere. Only an owner can reset another owner.
 

@@ -50,20 +50,22 @@ class Session extends ChangeNotifier {
   }
 
   /// Step 1 of mobile sign-in / password reset: the server texts a code (same answer for unknown numbers).
-  Future<void> requestOtp(String server, String phone10, {String purpose = 'LOGIN'}) async {
+  /// In self-SMS mode the answer carries the code to send from this phone (see SelfSms).
+  Future<Map<String, dynamic>> requestOtp(String server, String phone10, {String purpose = 'LOGIN'}) async {
     api.baseUrl = server.trim();
     api.token = null;
-    await api.post('/v1/auth/otp/request', {'phone': phone10, 'purpose': purpose});
+    final res = await api.post('/v1/auth/otp/request', {'phone': phone10, 'purpose': purpose});
     final p = await SharedPreferences.getInstance();
     await p.setString('server', api.baseUrl);
     await p.setString('last_phone', phone10);
+    return res is Map ? Map<String, dynamic>.from(res) : <String, dynamic>{};
   }
 
   /// Step 2: the SMS code signs the worker in. No password is needed (or stored) for this.
   Future<void> loginWithOtp(String server, String phone10, String code) async {
     api.baseUrl = server.trim();
     api.token = null;
-    final res = await api.post('/v1/auth/otp/verify', {'phone': phone10, 'code': code.trim(), 'mobile': true});
+    final res = await api.post('/v1/auth/otp/verify', {'phone': phone10, 'code': code.trim(), 'mobile': true, 'deviceId': await deviceId()});
     await _signedIn(res, phone: phone10);
   }
 
@@ -72,7 +74,7 @@ class Session extends ChangeNotifier {
     api.baseUrl = server.trim();
     api.token = null;
     final res = await api.post('/v1/auth/otp/reset-password',
-        {'phone': phone10, 'code': code.trim(), 'newPassword': newPassword, 'mobile': true});
+        {'phone': phone10, 'code': code.trim(), 'newPassword': newPassword, 'mobile': true, 'deviceId': await deviceId()});
     await _signedIn(res, unlockLogin: phone10, unlockPassword: newPassword, phone: phone10);
   }
 
@@ -113,10 +115,12 @@ class Session extends ChangeNotifier {
   Future<String?> unlockPhone() async => (await SharedPreferences.getInstance()).getString('unlock_phone');
 
   /// Kiosk exit for people who signed in by SMS code: text a fresh code to their own number.
-  Future<void> sendUnlockCode() async {
+  /// In self-SMS mode the answer carries the code to send from this phone (see SelfSms).
+  Future<Map<String, dynamic>> sendUnlockCode() async {
     final ph = await unlockPhone();
     if (ph == null) throw ApiException(400, 'NO_PHONE', 'No mobile number on this account');
-    await api.post('/v1/auth/otp/request', {'phone': ph, 'purpose': 'LOGIN'});
+    final res = await api.post('/v1/auth/otp/request', {'phone': ph, 'purpose': 'LOGIN'});
+    return res is Map ? Map<String, dynamic>.from(res) : <String, dynamic>{};
   }
 
   /// True if [code] is a valid code for the signed-in person's own number. Refreshes the session token.
@@ -124,7 +128,7 @@ class Session extends ChangeNotifier {
     final ph = await unlockPhone();
     if (ph == null || !Otp.codeComplete(code)) return false;
     try {
-      final res = await api.post('/v1/auth/otp/verify', {'phone': ph, 'code': code.trim(), 'mobile': true});
+      final res = await api.post('/v1/auth/otp/verify', {'phone': ph, 'code': code.trim(), 'mobile': true, 'deviceId': await deviceId()});
       if (me?['userId'] != null && res['userId'] != me!['userId']) return false;
       api.token = res['accessToken'] as String;
       final p = await SharedPreferences.getInstance();
