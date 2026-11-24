@@ -219,7 +219,8 @@ impossible travel speed, the same phone used by two guards, phone clock wrong, u
 Once payroll for a month is **locked**, that month's attendance can't be changed. Late approvals are paid in the
 next payroll as arrears.
 
-**Client sign-off (Attendance → Client sign-off):** for each site and month, whether the client has **confirmed**
+**Client sign-off (optional, off by default; Business policies → `clientSignoffEnabled`):** most clients never log
+in, so by default nothing waits for them. When switched on, **Attendance → Client sign-off** shows for each site and month, whether the client has **confirmed**
 the attendance, **disputed** it (with the days and what was wrong), or not responded yet. Correct the attendance if
 the client is right, then **Resolve** with a note. While a dispute is open, that client's invoice for the month
 can't be issued (`blockInvoiceOnDispute`). Invoice generation also warns about sites the client hasn't confirmed.
@@ -304,8 +305,16 @@ can only show who is on duty there today and punch them in and out with code + P
 
 ## 14. Guard: Android app
 
-Install the APK (your office sends the link), open it, enter the **server address** once (your office gives it),
-then your **mobile number and password**.
+Install the APK (your office sends the link) and open it. Type your **mobile number**, tap **Send code**, and type
+the **6-digit code** that arrives by SMS. That's all: no password to remember, and the app stays signed in (30 days
+by default). Office staff with an e-mail login can still use **Sign in with e-mail / password**, with **Forgot
+password?** (SMS code) if needed.
+
+* **Only people the agency has added can sign in.** A number the agency hasn't given an app login gets no code.
+* **Someone who leaves** (Employees → Exit) or is suspended or deactivated is signed out of the app at once and can't
+  sign in, get a code or reset a password, until the agency reinstates them.
+* **Forgot password / lost phone:** sign in again with an SMS code, or the office uses **Users & roles → Reset
+  password** / **Sign out everywhere**.
 
 | Tab | Use |
 |---|---|
@@ -341,9 +350,8 @@ see only their own data: guards required vs reported today per site, outstanding
 only, printable), **statement**, and **incidents** shared with them. Client admins can also report incidents.
 
 **Attendance (client admins):** per site and month, a day strip of guards *required vs reported* (short days are
-highlighted) and a person × day grid (names and P/H/A only, no pay data). The client admin either **confirms the
-month** or **disputes** it, choosing the days and saying what was wrong. A dispute reaches the agency
-immediately and holds that month's invoice until the agency resolves it.
+highlighted) and a person × day grid (names and P/H/A only, no pay data). If the agency has switched the optional
+client sign-off on, the client admin can **confirm** the month or **dispute** days; otherwise the page is view-only.
 
 ---
 

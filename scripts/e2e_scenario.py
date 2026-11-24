@@ -32,6 +32,10 @@ BASE = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8080"
 IST = timezone(timedelta(hours=5, minutes=30))
 import os
 RUN = os.environ.get("E2E_RUN") or uuid.uuid4().hex[:6]  # E2E_RUN=demo gives stable demo logins
+import hashlib
+# real 10-digit mobile numbers (OTP sign-in matches digits): 3 digits derived from the run id
+RUN_D = f"{int(hashlib.md5(RUN.encode()).hexdigest(), 16) % 1000:03d}"
+G3_PHONE = f"8{RUN_D}333333"
 FAILS = []
 
 
@@ -170,7 +174,7 @@ call("POST", "/v1/pay-rates", {"serviceTypeId": st["GUARD"]["id"], "siteId": sit
 step("Employees: onboarding, verification gate, activation")
 emps = {}
 for i in range(1, 5):
-    e = call("POST", "/v1/employees", {"employeeCode": f"G{i}", "firstName": f"Guard{i}", "phone": f"9{RUN[:3]}00{i}{i}{i}{i}"[:10],
+    e = call("POST", "/v1/employees", {"employeeCode": f"G{i}", "firstName": f"Guard{i}", "phone": f"9{RUN_D}00{i}{i}{i}{i}"[:10],
                                        "branchId": branch["id"], "serviceTypeId": st["GUARD"]["id"], "joinedOn": "2026-01-01",
                                        "bankAccountNo": f"00012345{i}", "bankIfsc": "HDFC0001234"}, owner)
     emps[f"G{i}"] = e
@@ -281,8 +285,8 @@ check(float(g1["units"]) == 31, "G1 muster: 31 duties across two sites")
 # ------------------------------------------------------------------ live geofence
 step("Live guard check-in with geofence ENFORCE")
 call("POST", "/v1/roster/generate", {"from": date.today().isoformat(), "to": date.today().isoformat(), "siteId": siteA["id"]}, ops_t)
-call("POST", f"/v1/employees/{G['G3']}/create-login", {"phone": f"8{RUN[:3]}333333"[:10], "password": "guard123"}, owner)
-g3_t = call("POST", "/v1/auth/login", {"login": f"8{RUN[:3]}333333"[:10], "password": "guard123"})["accessToken"]
+call("POST", f"/v1/employees/{G['G3']}/create-login", {"phone": G3_PHONE, "password": "guard123"}, owner)
+g3_t = call("POST", "/v1/auth/login", {"login": G3_PHONE, "password": "guard123"})["accessToken"]
 duties = call("GET", "/v1/me/duties", token=g3_t)
 now_dt = datetime.now(timezone.utc)
 now = now_dt.isoformat().replace("+00:00", "Z")
@@ -489,11 +493,16 @@ check(code == 404, "another guard cannot open it")
 code, _ = call("GET", f"/v1/attendance/photos/{p1}", token=other, expect=404, raw=True)
 check(code == 404, "other agency cannot open it")
 
-step("Client confirms / disputes attendance; a dispute blocks the invoice until resolved")
+step("Optional client sign-off: off by default; when on, a dispute blocks the invoice until resolved")
 call("POST", "/v1/users", {"fullName": "Phoenix Facility Manager", "email": f"client.{RUN}@phoenix.test", "role": "CLIENT_ADMIN",
                            "clientId": c1["id"], "password": "Client@123"}, owner)
 cl_t = call("POST", "/v1/auth/login", {"login": f"client.{RUN}@phoenix.test", "password": "Client@123"})["accessToken"]
+code, _ = call("POST", "/v1/portal/attendance/signoff", {"siteId": siteA["id"], "month": "2026-11", "status": "CONFIRMED"}, cl_t,
+               expect=422, raw=True)
+check(code == 422, "client sign-off is off by default: nothing waits for the client")
+call("PUT", "/v1/settings", {"settings": {"clientSignoffEnabled": True}}, owner)
 sheet_c = call("GET", f"/v1/portal/attendance?month=2026-11&siteId={siteA['id']}", token=cl_t)
+check(sheet_c["signoffEnabled"] is True, "agency switched client sign-off on")
 d3 = [d for d in sheet_c["days"] if d["day"] == 3][0]
 check(d3["required"] == 2 and float(d3["reported"]) == 1, f"client sees 3 Nov: 2 required, 1 reported ({d3})")
 check(all("pay" not in str(k).lower() for p in sheet_c["people"] for k in p), "client sheet has no pay data")
@@ -522,6 +531,38 @@ check(code == 404, "other agency gets 404 for our employee (non-disclosing)")
 check(call("GET", "/v1/employees", token=other)["total"] == 0, "other agency sees zero employees")
 code, _ = call("GET", f"/v1/invoices/{inv1['id']}", token=other, expect=404, raw=True)
 check(code == 404, "other agency cannot read our invoice")
+
+# ------------------------------------------------------------------ app sign-in by mobile number + SMS code
+step("App sign-in with mobile + OTP; no self-registration; leavers locked out")
+g4_phone = f"7{RUN_D}444444"   # G4 (the demo guard G3 keeps working)
+call("POST", f"/v1/employees/{G['G4']}/create-login", {"phone": g4_phone, "password": "guard123"}, owner)
+r0 = call("POST", "/v1/auth/otp/request", {"phone": "9999999999"})
+check(r0["sent"] is True and "devCode" not in r0, "unknown number gets the same answer, but no code is sent (no self-registration)")
+r1 = call("POST", "/v1/auth/otp/request", {"phone": "+91 " + g4_phone})
+if "devCode" in r1:
+    code, _ = call("POST", "/v1/auth/otp/verify", {"phone": g4_phone, "code": "000000" if r1["devCode"] != "000000" else "111111"}, expect=400, raw=True)
+    check(code == 400, "wrong OTP refused")
+    tok = call("POST", "/v1/auth/otp/verify", {"phone": g4_phone, "code": r1["devCode"], "mobile": True})["accessToken"]
+    check(call("GET", "/v1/me", token=tok)["role"] == "GUARD", "guard signed in with mobile number + OTP")
+    code, _ = call("POST", "/v1/auth/otp/request", {"phone": g4_phone}, expect=429, raw=True)
+    check(code == 429, "asking for another code within 30 s is refused")
+    time.sleep(31)
+    rr = call("POST", "/v1/auth/otp/request", {"phone": g4_phone, "purpose": "RESET"})
+    call("POST", "/v1/auth/otp/reset-password", {"phone": g4_phone, "code": rr["devCode"], "newPassword": "newguard123"})
+    check(call("POST", "/v1/auth/login", {"login": g4_phone, "password": "newguard123"})["accessToken"], "forgot password: reset with an SMS code")
+    code, _ = call("GET", "/v1/me", token=tok, expect=401, raw=True)
+    check(code == 401, "resetting the password signs out other devices")
+    tok = call("POST", "/v1/auth/login", {"login": g4_phone, "password": "newguard123", "mobile": True})["accessToken"]
+    call("POST", f"/v1/employees/{G['G4']}/exit", {"reason": "Resigned", "date": date.today().isoformat()}, owner)
+    code, _ = call("GET", "/v1/me", token=tok, expect=401, raw=True)
+    check(code == 401, "guard who left: open app session ends at once")
+    code, _ = call("POST", "/v1/auth/login", {"login": g4_phone, "password": "newguard123"}, expect=403, raw=True)
+    check(code == 403, "guard who left cannot sign in")
+    time.sleep(31)
+    r2 = call("POST", "/v1/auth/otp/request", {"phone": g4_phone, "purpose": "RESET"})
+    check("devCode" not in r2, "guard who left gets no OTP and cannot reset the password")
+else:
+    print("  SKIP  OTP checks need OTP_DEV_ECHO=true on a local server")
 
 # ------------------------------------------------------------------ platform operator (needs PLATFORM_ADMIN_* on the server)
 PA_EMAIL, PA_PW = os.environ.get("E2E_PLATFORM_EMAIL"), os.environ.get("E2E_PLATFORM_PASSWORD")
@@ -580,7 +621,7 @@ Logins created (password in brackets):
   Owner       owner.{RUN}@shield.test  (Passw0rd!)
   Finance     fin.{RUN}@shield.test    (Passw0rd!)
   Operations  ops.{RUN}@shield.test    (Passw0rd!)
-  Guard G3    8{RUN[:3]}333333           (guard123)   -> phone view /guard
+  Guard G3    {G3_PHONE}           (guard123, or sign in with mobile + OTP)   -> phone view /guard
   Client      client.{RUN}@phoenix.test (Client@123) -> client portal /portal
   Supervisor  sup.{RUN}@shield.test    (Passw0rd!)   -> Site A only
   Gate kiosk  kiosk.{RUN}@shield.test  (Passw0rd!)   -> /kiosk at Site B; G1 punches with code G1 + PIN 5937

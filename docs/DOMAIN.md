@@ -81,9 +81,11 @@ at that client's sites.
 | 33 | Supervisor marks the **whole team** | Roll-call: one team photo + the supervisor's GPS marks the selected duties at one site. Source `SUPERVISOR`, never auto-approved, and the supervisor can't approve it. A site-limited supervisor can't mark other sites. |
 | 34 | Site with **no phone and no kiosk** (paper register) | Office enters the signed register page with its photo. Each line becomes a correction request, approved by another person. Source `MANUAL`. |
 | 35 | **Ghost guards** (inventing attendance) | Proxy and register marking always need a second person (`autoApproveSources`). Who marked each punch is kept (`marked_by`), along with photos, location and device. |
-| 36 | Client says **"your guard wasn't there"** | Client portal: required vs reported per day. The client confirms or disputes the month. A dispute holds that month's invoice until the agency corrects the attendance and resolves the dispute. |
+| 36 | Client says **"your guard wasn't there"** | Optional (`clientSignoffEnabled`, off by default). Client portal: required vs reported per day. The client confirms or disputes the month. A dispute holds that month's invoice until the agency corrects the attendance and resolves the dispute. |
 | 37 | Mixed team at one site (supervisor + guards + housekeeping) | Each role is its own post with its own service type. Contract and pay rates are keyed by site + service type, so each person's duty is priced correctly, and the client sees each role in the attendance sheet. |
 | 38 | Server runs in a non-UTC time zone | Shift templates are wall-clock times in the site's (or agency's) time zone, independent of the server's zone. |
+| 39 | Guard can't read or forgets passwords | App sign-in is **mobile number + SMS code**; the app stays signed in for 30 days. No self-registration: codes only go to numbers the agency has added. |
+| 40 | Guard **leaves** or is suspended | Exit / suspend turns off their app access and ends open sessions at once; they get no sign-in code and can't reset a password. Reinstating restores access. |
 
 ## Configurable policies (Settings → Policies)
 

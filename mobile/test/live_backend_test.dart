@@ -112,6 +112,32 @@ void main() {
     }, true, batch) as Map;
     expect(r['marked'], todo.length);
   }, skip: server.isEmpty ? 'set --dart-define=SERVER=...' : false);
+
+  // OTP sign-in against a local server started with OTP_DEV_ECHO=true (the code comes back as devCode; test only).
+  test('a registered number signs in with an SMS code; an unknown number gets no code', () async {
+    SharedPreferences.setMockInitialValues({});
+    final s = Session();
+    await s.init();
+    final api = Api(server);
+    // a fresh random number each run, so the per-number rate limit (3 per 15 min) never interferes
+    final unknownPhone = '9${DateTime.now().microsecondsSinceEpoch % 1000000000}'.padRight(10, '7').substring(0, 10);
+    final unknown = Map<String, dynamic>.from(await api.post('/v1/auth/otp/request', {'phone': unknownPhone}));
+    expect(unknown['sent'], isTrue);
+    expect(unknown.containsKey('devCode'), isFalse);
+    const phone = String.fromEnvironment('OTP_PHONE', defaultValue: '9845100010');
+    Map<String, dynamic> r;
+    try {
+      r = Map<String, dynamic>.from(await api.post('/v1/auth/otp/request', {'phone': phone}));
+    } on ApiException catch (e) {
+      if (e.status == 429) return markTestSkipped('rate limit for $phone: ${e.message}');
+      rethrow;
+    }
+    if (!r.containsKey('devCode')) return markTestSkipped('server does not echo codes (OTP_DEV_ECHO=false)');
+    await s.loginWithOtp(server, phone, '${r['devCode']}');
+    expect(s.me, isNotNull);
+    expect(await s.hasUnlockPassword(), isFalse);
+    expect(await s.unlockPhone(), phone);
+  }, skip: server.isEmpty ? 'set --dart-define=SERVER=...' : false);
 }
 
 // 1x1 white JPEG

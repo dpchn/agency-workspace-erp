@@ -76,6 +76,7 @@ In production only Caddy (80/443) is exposed. The backend, web server and databa
 - [ ] `JWT_SECRET`, `POSTGRES_PASSWORD`, `DB_OWNER_PASSWORD`, `DB_APP_PASSWORD` changed (long random values)
 - [ ] `.env` is not committed (it is in `.gitignore`) and is readable only by you (`chmod 600 .env`)
 - [ ] `SIGNUP_ENABLED=false` if you don't want anyone on the internet creating agencies
+- [ ] `SMS_PROVIDER=http` with your SMS gateway (`SMS_HTTP_URL`), so guards get their sign-in codes; `OTP_DEV_ECHO=false`
 - [ ] Daily backups scheduled and copied off the server (section 4)
 - [ ] Firewall allows only 22, 80 and 443 (`ufw allow OpenSSH && ufw allow 80 && ufw allow 443 && ufw enable`)
 - [ ] Statutory salary components checked by a payroll professional for each state you operate in

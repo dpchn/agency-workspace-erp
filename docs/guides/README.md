@@ -13,9 +13,9 @@ Prestige Lakeside), guards, a supervisor and housekeeping staff, including one w
 | **The ERP company** (you sell the software) | [01](01-platform-onboarding.md) |
 | **Agency owner**, first week | [02](02-agency-first-setup.md) → [03](03-clients-sites-posts.md) → [04](04-contracts-rates.md) → [05](05-pay-rates-salary.md) → [06](06-employees.md) → [07](07-deployments-transfers.md) → [08](08-roster.md) |
 | **Operations / supervisor** (every day) | [08](08-roster.md), [09](09-attendance-approval.md), [10](10-no-phone-attendance.md), [12](12-leave.md), [13](13-incidents.md), [19](19-supervisor-app.md) |
-| **Finance** (month end) | [11](11-client-signoff.md), [14](14-payroll.md), [15](15-invoicing-collections.md), [16](16-reports-audit.md) |
+| **Finance** (month end) | [14](14-payroll.md), [15](15-invoicing-collections.md), [16](16-reports-audit.md) |
 | **Guard / housekeeping** | [18](18-guard-app.md) (with a phone) or [10](10-no-phone-attendance.md) (without) |
-| **Client** (society / mall manager) | [17](17-client-portal.md), [11](11-client-signoff.md) |
+| **Client** (society / mall manager, if you give them a login) | [17](17-client-portal.md) |
 
 ## All guides
 
@@ -31,7 +31,7 @@ Prestige Lakeside), guards, a supervisor and housekeeping staff, including one w
 | 08 | [Roster](08-roster.md): generate, fill gaps, replace a no-show, handover, extra shift, double duty | [▶](videos/08-roster.webm) |
 | 09 | [Attendance review and approval](09-attendance-approval.md): sources, flags, approvals, muster roll, locked months | [▶](videos/09-attendance-approval.webm) |
 | 10 | [Workers without a phone](10-no-phone-attendance.md): site kiosk, team roll-call, paper register, second-person approval | [▶](videos/10-no-phone-attendance.webm) |
-| 11 | [Client sign-off](11-client-signoff.md): client confirms or disputes; dispute holds the invoice | [▶](videos/11-client-signoff.webm) |
+| 11 | [Client sign-off (optional, off by default)](11-client-signoff.md): client confirms or disputes; dispute holds the invoice | [▶](videos/11-client-signoff.webm) |
 | 12 | [Leave](12-leave.md): apply, approve, duties released, paid vs unpaid | [▶](videos/12-leave.webm) |
 | 13 | [Incidents](13-incidents.md): report, deadlines, escalation, close | [▶](videos/13-incidents.webm) |
 | 14 | [Payroll](14-payroll.md): per-duty pay across sites, approve, lock, bank file, payslips | [▶](videos/14-payroll.webm) |
@@ -46,7 +46,7 @@ Prestige Lakeside), guards, a supervisor and housekeeping staff, including one w
 ```
 Onboard agency (01) → setup (02-03) → contracts & pay rates (04-05) → people (06) → postings (07)
   → roster (08) → attendance every day: phone (18), kiosk / roll-call / register (10, 19) → approve (09)
-  → client confirms (11) → payroll (14) + invoices (15) → collections (15) → reports (16)
+  → payroll (14) + invoices (15) → collections (15) → reports (16)
 ```
 
 More reference: [Operations manual](../OPERATIONS_MANUAL.md) · [Configuration](../CONFIGURATION.md) ·

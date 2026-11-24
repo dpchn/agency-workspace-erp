@@ -45,12 +45,16 @@ public class JwtService {
                               UUID tenantId, UUID membershipId, Role role,
                               List<UUID> branchIds, List<UUID> siteIds, UUID clientId, UUID employeeId) {}
 
-    public String issue(JwtEncoder encoder, TokenClaims c) {
+    public String issue(JwtEncoder encoder, TokenClaims c) { return issue(encoder, c, false); }
+
+    /** mobile: app sign-ins last mobileTokenDays; leaving / deactivation still ends them at once (token epoch). */
+    public String issue(JwtEncoder encoder, TokenClaims c, boolean mobile) {
         Instant now = Instant.now();
+        long minutes = mobile ? props.security().mobileTokenDays() * 1440L : props.security().accessTokenMinutes();
         JwtClaimsSet.Builder b = JwtClaimsSet.builder()
                 .subject(c.userId().toString())
                 .issuedAt(now)
-                .expiresAt(now.plus(props.security().accessTokenMinutes(), ChronoUnit.MINUTES))
+                .expiresAt(now.plus(minutes, ChronoUnit.MINUTES))
                 .claim("name", c.name())
                 .claim("ep", c.epoch())
                 .claim("pa", c.platformAdmin());

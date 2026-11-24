@@ -1,6 +1,7 @@
 import 'package:intl/intl.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../core/l10n.dart';
 import '../core/api.dart';
 
 final _time = DateFormat('hh:mm a');
@@ -75,7 +76,7 @@ class AsyncList<T> extends StatefulWidget {
   final Widget Function(BuildContext, T, VoidCallback reload) item;
   final String empty;
   final Widget? header;
-  const AsyncList({super.key, required this.load, required this.item, this.empty = 'Nothing here yet', this.header});
+  const AsyncList({super.key, required this.load, required this.item, this.empty = '', this.header});
   @override
   State<AsyncList<T>> createState() => AsyncListState<T>();
 }
@@ -88,7 +89,10 @@ class AsyncListState<T> extends State<AsyncList<T>> {
     _f = widget.load();
   }
 
-  void reload() => setState(() => _f = widget.load());
+  // block body: an arrow would return the new Future from the callback, which setState rejects
+  void reload() => setState(() {
+        _f = widget.load();
+      });
 
   @override
   Widget build(BuildContext context) {
@@ -104,9 +108,9 @@ class AsyncListState<T> extends State<AsyncList<T>> {
           if (snap.connectionState != ConnectionState.done) {
             children.add(const Padding(padding: EdgeInsets.all(40), child: Center(child: CircularProgressIndicator())));
           } else if (snap.hasError) {
-            children.add(_Message(icon: Icons.cloud_off, text: errorText(snap.error!), action: TextButton(onPressed: reload, child: const Text('Retry'))));
+            children.add(_Message(icon: Icons.cloud_off, text: errorText(snap.error!), action: TextButton(onPressed: reload, child: Text(tr('retry')))));
           } else if (snap.data!.isEmpty) {
-            children.add(_Message(icon: Icons.inbox_outlined, text: widget.empty));
+            children.add(_Message(icon: Icons.inbox_outlined, text: widget.empty.isEmpty ? tr('nothing_here') : widget.empty));
           } else {
             children.addAll(snap.data!.map((e) => widget.item(context, e, reload)));
           }
@@ -179,13 +183,13 @@ Future<String?> askText(BuildContext context, String title, {String hint = '', b
       title: Text(title),
       content: TextField(controller: c, autofocus: true, maxLines: 3, decoration: InputDecoration(hintText: hint)),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+        TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('cancel'))),
         FilledButton(
             onPressed: () {
               if (required && c.text.trim().isEmpty) return;
               Navigator.pop(ctx, c.text.trim());
             },
-            child: const Text('OK')),
+            child: Text(tr('ok'))),
       ],
     ),
   );

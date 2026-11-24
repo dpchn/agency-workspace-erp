@@ -11,7 +11,8 @@ then tracks payments, TDS and what is still owed.
 
 ## Before you start
 * An approved contract with rates per site and worker type (guide 04).
-* The month's attendance is approved (guide 09) and, ideally, the client has confirmed it (guide 11).
+* The month's attendance is approved (guide 09). Client confirmation is **not** needed unless your agency switched
+  the optional client sign-off on (guide 11).
 * Generate after the month ends. Days not yet worked or still pending are not billed, and on attendance-linked
   monthly rates they show as uncovered.
 
@@ -21,7 +22,7 @@ then tracks payments, TDS and what is still owed.
    * **extra shifts** the client asked for, at the extra-shift rate,
    * **Less: uncovered duties** on attendance-linked monthly rates (plus any absence penalty),
    * GST: **CGST + SGST** when the client is in your state, **IGST** otherwise,
-   * a **Check before issuing** box: pending attendance not billed, client sign-off missing or disputed.
+   * a **Check before issuing** box: pending attendance not billed, client sign-off missing or disputed (only when sign-off is on).
 
    ![Draft](img/15-draft.png)
 2. Optional **Add manual line** (negative rate = discount). **Mark reviewed** → a **different** person **Approve** →

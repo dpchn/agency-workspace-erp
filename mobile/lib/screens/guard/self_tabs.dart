@@ -1,5 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 
+import '../../core/l10n.dart';
 import '../../core/session.dart';
 import '../../widgets/common.dart';
 
@@ -25,7 +26,7 @@ class _MyAttendanceTabState extends State<MyAttendanceTab> {
       Expanded(
         child: AsyncList<Map<String, dynamic>>(
           key: ValueKey(_month),
-          empty: 'No attendance this month',
+          empty: tr('no_attendance'),
           load: () async {
             final rows = (await widget.session.api.get('/v1/me/attendance?month=${ym(_month)}') as List).map((e) => Map<String, dynamic>.from(e)).toList();
             final units = rows.fold<num>(0, (a, r) => a + (num.tryParse('${r['pay_units']}') ?? 0));
@@ -33,7 +34,7 @@ class _MyAttendanceTabState extends State<MyAttendanceTab> {
           },
           item: (context, r, _) {
             if (r.containsKey('_summary')) {
-              return Card(child: ListTile(leading: const Icon(Icons.summarize), title: Text('Paid duties: ${r['_summary']}')));
+              return Card(child: ListTile(leading: const Icon(Icons.summarize), title: Text(tr('paid_duties', {'n': r['_summary']}))));
             }
             return Card(
               child: ListTile(
@@ -61,7 +62,7 @@ class PayslipsTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AsyncList<Map<String, dynamic>>(
-      empty: 'No payslips yet',
+      empty: tr('no_payslips'),
       load: () async => (await session.api.get('/v1/me/payslips') as List).map((e) => Map<String, dynamic>.from(e)).toList(),
       item: (context, p, _) => Card(
         child: ListTile(
@@ -83,7 +84,7 @@ class PayslipScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Payslip')),
+      appBar: AppBar(title: Text(tr('payslip'))),
       body: FutureBuilder(
         future: session.api.get('/v1/payroll/payslips/$id'),
         builder: (context, snap) {
@@ -114,7 +115,7 @@ class PayslipScreen extends StatelessWidget {
                 title: Text('${p['employee_name']} (${p['employee_code']})'),
                 subtitle: Text('${p['period_start']} to ${p['period_end']}\nA/c ${p['bank_account_no'] ?? '-'}'),
                 trailing: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
-                  const Text('Net pay', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                  Text(tr('net_pay'), style: const TextStyle(fontSize: 12, color: Colors.grey)),
                   Text(fmtMoney(p['net']), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 ]),
               ),
@@ -143,10 +144,10 @@ class LeaveTab extends StatelessWidget {
     final key = GlobalKey<AsyncListState<Map<String, dynamic>>>();
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
-          onPressed: () => _apply(context, () => key.currentState?.reload()), icon: const Icon(Icons.add), label: const Text('Apply leave')),
+          onPressed: () => _apply(context, () => key.currentState?.reload()), icon: const Icon(Icons.add), label: Text(tr('apply_leave'))),
       body: AsyncList<Map<String, dynamic>>(
         key: key,
-        empty: 'No leave requests',
+        empty: tr('no_leave'),
         load: () async => (await session.api.get('/v1/leaves') as List).map((e) => Map<String, dynamic>.from(e)).toList(),
         item: (context, l, _) => Card(
           child: ListTile(
@@ -177,11 +178,11 @@ class _LeaveFormState extends State<_LeaveForm> {
     return Padding(
       padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(context).viewInsets.bottom + 16),
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        const Text('Apply for leave', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        Text(tr('apply_for_leave'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
         const SizedBox(height: 12),
         DropdownButtonFormField<String>(
           initialValue: _type,
-          decoration: const InputDecoration(labelText: 'Type', border: OutlineInputBorder()),
+          decoration: InputDecoration(labelText: tr('leave_type'), border: const OutlineInputBorder()),
           items: const ['CASUAL', 'SICK', 'EARNED', 'UNPAID'].map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
           onChanged: (v) => setState(() => _type = v!),
         ),
@@ -196,7 +197,7 @@ class _LeaveFormState extends State<_LeaveForm> {
           },
         ),
         const SizedBox(height: 12),
-        TextField(controller: _reason, decoration: const InputDecoration(labelText: 'Reason', border: OutlineInputBorder()), maxLines: 2),
+        TextField(controller: _reason, decoration: InputDecoration(labelText: tr('reason'), border: const OutlineInputBorder()), maxLines: 2),
         const SizedBox(height: 16),
         BusyButton(
           onPressed: () async {
@@ -204,7 +205,7 @@ class _LeaveFormState extends State<_LeaveForm> {
             await widget.session.api.post('/v1/leaves', {'leaveType': _type, 'fromDate': ymd(_range!.start), 'toDate': ymd(_range!.end), 'reason': _reason.text});
             if (context.mounted) Navigator.pop(context, true);
           },
-          child: const Text('Submit'),
+          child: Text(tr('submit')),
         ),
       ]),
     );

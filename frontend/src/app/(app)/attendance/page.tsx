@@ -15,13 +15,16 @@ import { RegisterEntry, RollCall, SignOffs } from "./team";
 export default function AttendancePage() {
   const { can } = useSession();
   const [tab, setTab] = useState("records");
+  // Client sign-off is optional (policy clientSignoffEnabled, off by default): the agency manages attendance alone.
+  const { data: settings } = useApi<any>(can("MASTER_READ") ? "/v1/settings" : null);
+  const signoffOn = !!settings?.settings?.clientSignoffEnabled;
   return (
     <div>
       <Tabs active={tab} onChange={setTab} tabs={[
         { key: "records", label: "Records & approval" },
         ...(can("ATTENDANCE_MARK") ? [{ key: "roll", label: "Team roll-call" }] : []),
         ...(can("ATTENDANCE_ADJUST") ? [{ key: "register", label: "Register entry" }] : []),
-        { key: "adj", label: "Corrections" }, { key: "signoff", label: "Client sign-off" }, { key: "muster", label: "Muster roll" },
+        { key: "adj", label: "Corrections" }, ...(signoffOn ? [{ key: "signoff", label: "Client sign-off" }] : []), { key: "muster", label: "Muster roll" },
       ]} />
       {tab === "records" && <Records />}
       {tab === "roll" && <RollCall />}

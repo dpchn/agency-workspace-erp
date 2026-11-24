@@ -1,4 +1,8 @@
-# 11 · Client sign-off of attendance (confirm or dispute)
+# 11 · Client sign-off of attendance (optional: confirm or dispute)
+
+> **Optional, off by default.** Most sites (empty plots, malls, schools) never log in, so nothing waits for the
+> client: the agency approves attendance and issues invoices by itself. Turn this on per agency only if a client asks
+> for it: **Settings & users → Business policies → `clientSignoffEnabled`**.
 
 **Who / where:** client admin → **client portal → Attendance** · agency → **Attendance → Client sign-off** and **Invoices**
 
@@ -9,6 +13,7 @@ Before you bill a month, the client sees exactly which guards were on duty each 
 **disputes** specific days. Billing disagreements are settled on attendance, before the invoice, not after.
 
 ## Before you start
+* **Business policies → `clientSignoffEnabled`** is ticked (it is off by default).
 * The client has a portal login with role **Client admin** (Settings & users → Add user, linked to the client).
   **Client viewer** can see but not sign off.
 * Attendance for the month is recorded and mostly approved (guide 09).

@@ -96,6 +96,7 @@ public class EmployeeController extends CrudSupport<Employee> {
         Employee e = load(id);
         move(e, Set.of("ACTIVE"), "SUSPENDED", t.reason());
         cancelFutureAssignments(e.getId(), LocalDate.now(), "Employee suspended");
+        setAppAccess(e, false);
         return e;
     }
 
@@ -105,6 +106,7 @@ public class EmployeeController extends CrudSupport<Employee> {
         Authz.require(Perm.HR_WRITE);
         Employee e = load(id);
         move(e, Set.of("SUSPENDED"), "ACTIVE", null);
+        setAppAccess(e, true);
         return e;
     }
 
@@ -121,8 +123,23 @@ public class EmployeeController extends CrudSupport<Employee> {
         jdbc.update("update deployments set end_date = ?, status = case when start_date > ? then 'CANCELLED' else status end, updated_at = now() " +
                 "where employee_id = ? and status = 'ACTIVE' and (end_date is null or end_date > ?)", date, date, e.getId(), date);
         cancelFutureAssignments(e.getId(), date.plusDays(1), "Employee exited");
-        if (e.getUserId() != null) memberships.findByTenantIdAndUserId(TenantContext.requireTenant(), e.getUserId()).ifPresent(m -> m.setStatus("INACTIVE"));
+        setAppAccess(e, false);
         return e;
+    }
+
+    @Autowired private app.erp.security.TokenRevocationValidator revocation;
+
+    /**
+     * Suspended or exited staff lose app access at once: membership off (no sign-in, no OTP, no password reset)
+     * and every open session ended. Reinstating turns the membership back on.
+     */
+    private void setAppAccess(Employee e, boolean on) {
+        if (e.getUserId() == null) return;
+        memberships.findByTenantIdAndUserId(TenantContext.requireTenant(), e.getUserId()).ifPresent(m -> m.setStatus(on ? "ACTIVE" : "INACTIVE"));
+        if (!on) {
+            users.findById(e.getUserId()).ifPresent(u -> { u.setTokenEpoch(u.getTokenEpoch() + 1); users.save(u); });
+            revocation.evict(e.getUserId());
+        }
     }
 
     public record PinRequest(String pin) {}

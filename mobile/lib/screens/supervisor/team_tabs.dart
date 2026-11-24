@@ -1,5 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 
+import '../../core/l10n.dart';
 import '../../core/punch.dart';
 import '../../core/session.dart';
 import '../../widgets/common.dart';
@@ -82,7 +83,7 @@ class _TodayTabState extends State<TodayTab> {
     return AsyncList<Map<String, dynamic>>(
       key: ValueKey(_day),
       load: _load,
-      empty: 'No shifts',
+      empty: tr('no_shifts'),
       header: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
         IconButton(icon: const Icon(Icons.chevron_left), onPressed: () => setState(() => _day = _day.subtract(const Duration(days: 1)))),
         Text(fmtDate(_day.toIso8601String()), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
@@ -133,7 +134,7 @@ class _TodayTabState extends State<TodayTab> {
               if (write && status != 'FILLED' && status != 'CANCELLED')
                 Align(
                   alignment: Alignment.centerRight,
-                  child: BusyButton(icon: Icons.person_add, onPressed: () => _fill(shift, reload), child: const Text('Find guard')),
+                  child: BusyButton(icon: Icons.person_add, onPressed: () => _fill(shift, reload), child: Text(tr('find_guard'))),
                 ),
             ]),
           ),
@@ -201,15 +202,15 @@ class _ApprovalsTabState extends State<ApprovalsTab> {
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: Row(children: [
-                  Expanded(child: BusyButton(filled: false, onPressed: () => _decide('REJECTED'), child: const Text('Reject'))),
+                  Expanded(child: BusyButton(filled: false, onPressed: () => _decide('REJECTED'), child: Text(tr('reject')))),
                   const SizedBox(width: 12),
-                  Expanded(child: BusyButton(onPressed: () => _decide('APPROVED'), child: Text('Approve ${_selected.length}'))),
+                  Expanded(child: BusyButton(onPressed: () => _decide('APPROVED'), child: Text('${tr('approve')} ${_selected.length}'))),
                 ]),
               ),
             ),
       body: AsyncList<Map<String, dynamic>>(
         key: _key,
-        empty: 'Nothing waiting for approval',
+        empty: tr('nothing_to_approve'),
         load: () async => (await widget.session.api.get(
                     '/v1/attendance/records?from=${ymd(now.subtract(const Duration(days: 31)))}&to=${ymd(now)}&approvalStatus=PENDING') as List)
             .map((e) => Map<String, dynamic>.from(e))

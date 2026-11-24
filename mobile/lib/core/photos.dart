@@ -3,8 +3,11 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:material_ui/material_ui.dart';
 
+import '../screens/camera_screen.dart';
 import 'api.dart';
+import 'nav.dart';
 
 /// A compressed photo taken in the app (selfie, team photo), kept in memory until uploaded.
 class Photo {
@@ -18,8 +21,20 @@ class Photo {
 
 /// Camera capture and upload of attendance photo evidence (POST /v1/attendance/photos).
 class Photos {
-  /// Opens the camera. Front camera for selfies / kiosk, rear for team photos. Null if cancelled.
+  /// Opens the in-app camera, which takes the picture by itself after a countdown (no shutter, no confirm).
+  /// Front camera for selfies / kiosk, rear for team photos. Null if cancelled. Falls back to the phone's
+  /// camera app when the in-app camera can't start (no camera, permission refused, old device).
   static Future<Photo?> capture({bool front = true}) async {
+    final nav = appNavigator.currentState;
+    if (nav != null) {
+      final r = await nav.push<Object?>(MaterialPageRoute(fullscreenDialog: true, builder: (_) => CameraScreen(front: front)));
+      if (r is Uint8List) return Photo(r, DateTime.now());
+      if (r is! CameraUnavailable) return null; // cancelled
+    }
+    return _pick(front);
+  }
+
+  static Future<Photo?> _pick(bool front) async {
     final x = await ImagePicker().pickImage(
       source: ImageSource.camera,
       preferredCameraDevice: front ? CameraDevice.front : CameraDevice.rear,

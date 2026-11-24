@@ -9,7 +9,7 @@ Your clients (malls, tech parks, housing societies) see the service they're payi
 attendance, invoices, statement and incidents. They see only their own sites, with no pay data.
 
 ## Before you start
-* **Settings & users → Add user**, role **Client admin** (can confirm / dispute attendance and report incidents) or
+* **Settings & users → Add user**, role **Client admin** (can report incidents, and confirm / dispute attendance if sign-off is on) or
   **Client viewer** (read only), linked to the client.
 
 ## Steps
@@ -18,7 +18,7 @@ attendance, invoices, statement and incidents. They see only their own sites, wi
 
    ![Today](img/17-today.png)
 2. **Attendance:** month and site → required vs reported per day and who worked which day. Client admins
-   **Confirm month** or **Dispute** (guide 11).
+   **Confirm month** or **Dispute**, only if your agency switched client sign-off on (guide 11; off by default).
 
    ![Attendance](img/17-attendance.png)
 3. **Invoices:** issued invoices only, with period, due date, total and balance. Click one to view or print it.

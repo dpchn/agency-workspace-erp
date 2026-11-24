@@ -28,6 +28,7 @@ public class AuthController {
     private final JwtEncoder jwtEncoder;
     private final TokenRevocationValidator revocation;
     @org.springframework.beans.factory.annotation.Autowired private app.erp.common.AppProperties props;
+    @org.springframework.beans.factory.annotation.Autowired private OtpService otp;
 
     public AuthController(UserRepository users, MembershipRepository memberships, TenantRepository tenants,
                           PasswordEncoder encoder, JwtService jwt, JwtEncoder jwtEncoder, TokenRevocationValidator revocation) {
@@ -40,7 +41,7 @@ public class AuthController {
         this.revocation = revocation;
     }
 
-    public record LoginRequest(@NotBlank String login, @NotBlank String password, UUID tenantId) {}
+    public record LoginRequest(@NotBlank String login, @NotBlank String password, UUID tenantId, Boolean mobile) {}
 
     public record MembershipView(UUID membershipId, UUID tenantId, String tenantName, String tenantSlug, String role) {}
 
@@ -56,7 +57,7 @@ public class AuthController {
                 .filter(x -> encoder.matches(req.password(), x.getPasswordHash()))
                 .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", "Invalid login or password"));
         u.setLastLoginAt(Instant.now());
-        return issueFor(u, req.tenantId());
+        return issueFor(u, req.tenantId(), Boolean.TRUE.equals(req.mobile()));
     }
 
     public record SwitchRequest(UUID tenantId) {}
@@ -125,7 +126,43 @@ public class AuthController {
         }).toList();
     }
 
-    private LoginResponse issueFor(User u, UUID requestedTenant) {
+    // ---------------- app sign-in with mobile number + SMS code (no self-registration)
+
+    public record OtpRequest(String phone, String purpose) {}
+
+    @PostMapping("/auth/otp/request")
+    public Map<String, Object> otpRequest(@RequestBody OtpRequest r) {
+        return otp.request(r.phone(), r.purpose() == null ? "LOGIN" : r.purpose());
+    }
+
+    public record OtpVerify(String phone, String code, UUID tenantId, Boolean mobile) {}
+
+    @PostMapping("/auth/otp/verify")
+    public LoginResponse otpVerify(@RequestBody OtpVerify r) {
+        User u = otp.verify(r.phone(), r.code(), "LOGIN");
+        u.setLastLoginAt(Instant.now());
+        users.save(u);
+        return issueFor(u, r.tenantId(), !Boolean.FALSE.equals(r.mobile()));
+    }
+
+    public record OtpReset(String phone, String code, String newPassword, Boolean mobile) {}
+
+    /** Forgot password: SMS code, then a new password. Signs out every other device. */
+    @PostMapping("/auth/otp/reset-password")
+    public LoginResponse otpReset(@RequestBody OtpReset r) {
+        if (r.newPassword() == null || r.newPassword().length() < 8) throw ApiException.field("newPassword", "Minimum 8 characters");
+        User u = otp.verify(r.phone(), r.code(), "RESET");
+        u.setPasswordHash(encoder.encode(r.newPassword()));
+        u.setTokenEpoch(u.getTokenEpoch() + 1);
+        u.setLastLoginAt(Instant.now());
+        users.save(u);
+        revocation.evict(u.getId());
+        return issueFor(u, null, !Boolean.FALSE.equals(r.mobile()));
+    }
+
+    private LoginResponse issueFor(User u, UUID requestedTenant) { return issueFor(u, requestedTenant, false); }
+
+    private LoginResponse issueFor(User u, UUID requestedTenant, boolean mobile) {
         List<Membership> ms = memberships.findByUserIdAndStatus(u.getId(), "ACTIVE");
         Membership m = null;
         if (requestedTenant != null) {
@@ -148,7 +185,7 @@ public class AuthController {
                 m == null || m.getBranchIds() == null ? null : Arrays.asList(m.getBranchIds()),
                 m == null || m.getSiteIds() == null ? null : Arrays.asList(m.getSiteIds()),
                 m == null ? null : m.getClientId(), m == null ? null : m.getEmployeeId());
-        return new LoginResponse(jwt.issue(jwtEncoder, claims), u.getId(), u.getFullName(), u.isPlatformAdmin(),
+        return new LoginResponse(jwt.issue(jwtEncoder, claims, mobile), u.getId(), u.getFullName(), u.isPlatformAdmin(),
                 m == null ? null : m.getTenantId(), m == null ? null : m.getRole().name(), membershipViews(u.getId()));
     }
 

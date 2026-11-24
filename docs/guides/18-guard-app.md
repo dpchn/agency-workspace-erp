@@ -12,7 +12,8 @@ attendance and payslips, apply for leave and report incidents. Workers **without
 
 ## Before you start
 
-* The office has created the guard's **app login** (Employees → person → *Create app login*, mobile number + password). See [06-employees](06-employees.md).
+* The office has created the guard's **app login** (Employees → person → *Create app login* with their mobile number).
+  Only numbers added by the agency can sign in; there is no self-registration. See [06-employees](06-employees.md).
 * The guard is **rostered** for today ([08-roster](08-roster.md)).
 * The APK is installed (your office sends the link: GitHub **Releases → "Android app (latest)"**). The **server
   address** is filled in already, or the office tells you what to type the first time.
@@ -20,7 +21,9 @@ attendance and payslips, apply for leave and report incidents. Workers **without
 
 ## Steps
 
-1. **Sign in** with your **mobile number** and **password**.
+1. **Sign in**: the app opens in **English** (tap **हिन्दी** for Hindi). Type your **mobile number**, tap **Send code**,
+   and type the **6-digit SMS code**. No password needed; the app stays signed in (30 days by default).
+   Office staff can use **Sign in with e-mail / password** instead.
 
    ![Sign in](img/18-login.png)
 
@@ -69,7 +72,13 @@ attendance and payslips, apply for leave and report incidents. Workers **without
   for a quick review, not rejected.
 * **Two shifts in one day (double duty).** Both appear on the Duty tab; check in and out of each.
 * **I don't see my payslip.** Payslips appear when the office **locks** that month's payroll.
-* **New phone.** Install the app, sign in again. The office can **Sign out everywhere** for a lost phone.
+* **New phone.** Install the app and sign in with your mobile number and SMS code. For a lost phone the office uses
+  **Sign out everywhere**.
+* **Forgot password.** Not needed for the code sign-in; staff with a password use **Forgot password?** (SMS code) or
+  ask the office to **Reset password**.
+* **Left the agency.** The app signs you out at once, and no new code is sent to your number.
+* **No code arrives.** Wait 30 seconds and tap **Resend code** (at most 3 codes per 15 minutes). Still nothing? Ask the
+  office to check your mobile number on your employee record.
 
 ## Related
 

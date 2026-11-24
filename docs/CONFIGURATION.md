@@ -23,7 +23,12 @@ There are three layers of configuration:
 | `SIGNUP_ENABLED` | `true` | – | `true`: any agency can sign up on the login page. `false`: closed; you onboard agencies from the platform console. |
 | `PLATFORM_ADMIN_EMAIL` / `PLATFORM_ADMIN_PASSWORD` | empty | – | Your own platform-console login, created at backend start (password 10+ characters). An existing user is only flagged, their password is not changed. |
 | `TRIAL_DAYS` | `30` | – | Trial length for new agencies. |
-| `ACCESS_TOKEN_MINUTES` | `720` | – | How long a sign-in lasts (12 h). Guards on long shifts may want `1440`. |
+| `ACCESS_TOKEN_MINUTES` | `720` | – | How long a web sign-in lasts (12 h). |
+| `MOBILE_TOKEN_DAYS` | `30` | – | How long an app sign-in lasts, so guards don't need a new code every shift. Leaving the agency, deactivation or a password reset still ends it immediately. |
+| `SMS_PROVIDER` | `log` | – | How sign-in codes (OTP) are sent. `log`: only written to the backend log (development). `http`: your SMS gateway (below). |
+| `SMS_HTTP_URL` | – | with `http` | Gateway URL; `{phone}` (10 digits), `{otp}` and `{message}` are filled in, e.g. `https://sms.example.com/send?key=XXXX&to=91{phone}&text={message}` |
+| `SMS_HTTP_METHOD` / `SMS_HTTP_AUTH_HEADER` | `GET` / – | – | `POST` if your gateway needs it; optional header as `Name: value` (e.g. an API key) |
+| `OTP_DEV_ECHO` | `false` | – | Returns the code in the API response. **Local testing only, never in production.** |
 | `JOBS_ENABLED` | `true` | – | Background jobs (see below). Keep `true` on exactly one backend instance. |
 | `CORS_ORIGINS` | `*` | – | Origins allowed to call the API directly. `*` is safe because auth uses bearer tokens, not cookies. |
 | `TZ` | `Asia/Kolkata` | – | Server time zone (each agency also has its own time zone). |
@@ -102,7 +107,8 @@ Name, legal name, GSTIN, **state code** (decides CGST+SGST vs IGST on invoices),
 | `kioskPhotoRequired` | `true` | A site kiosk takes a photo with every punch |
 | `rollCallPhotoRequired` | `true` | A supervisor roll-call needs a photo of the team |
 | `pinMaxAttempts` / `pinLockMinutes` | `5` / `15` | Wrong kiosk PINs before that person's PIN locks, and for how long |
-| `blockInvoiceOnDispute` | `true` | A client's open attendance dispute for a month blocks issuing that month's invoice |
+| `clientSignoffEnabled` | `false` | Clients confirm or dispute monthly attendance in their portal. Off: the agency manages attendance and invoices alone; nothing waits for the client |
+| `blockInvoiceOnDispute` | `true` | When client sign-off is on: an open dispute for a month blocks issuing that month's invoice |
 | `checkInWindowMinutes` | `120` | How early or late a punch may be and still match a rostered duty |
 | `lateSubmissionHours` | `6` | Offline punches uploaded later than this are flagged |
 | `maxAccuracyMeters` | `100` | GPS readings less accurate than this are flagged |
@@ -144,7 +150,7 @@ Each user has **one role per agency**. They can optionally be limited to some **
 |---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
 | Kiosk punch (code + PIN), kiosk mode | ✔ | | ✔ | ✔ | | | | |
 | Set an employee's kiosk PIN | ✔ | ✔ | ✔ | ✔ | | | | |
-| Confirm / dispute monthly attendance | | | | | | | admin only | |
+| Confirm / dispute monthly attendance (only if `clientSignoffEnabled`) | | | | | | | admin only | |
 | Organisation settings, branding, policies | ✔ | | | | | | | |
 | Users & roles | ✔ | ✔ | | | | | | |
 | Masters (branches, service types, shifts, holidays) | edit | view | edit | view | view | view | | |

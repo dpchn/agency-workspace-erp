@@ -1,5 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 
+import '../core/l10n.dart';
 import '../core/session.dart';
 import '../widgets/common.dart';
 
@@ -17,7 +18,7 @@ class IncidentsTab extends StatelessWidget {
         backgroundColor: Colors.red.shade700,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.report),
-        label: const Text('Report incident'),
+        label: Text(tr('report_incident')),
         onPressed: () async {
           final ok = await showModalBottomSheet<bool>(context: context, isScrollControlled: true, builder: (_) => _ReportForm(session: session));
           if (ok == true) key.currentState?.reload();
@@ -25,7 +26,7 @@ class IncidentsTab extends StatelessWidget {
       ),
       body: AsyncList<Map<String, dynamic>>(
         key: key,
-        empty: 'No incidents',
+        empty: tr('no_incidents'),
         load: () async => (await session.api.get('/v1/incidents') as List).map((e) => Map<String, dynamic>.from(e)).toList(),
         item: (context, i, reload) {
           final status = '${i['status']}';
@@ -52,16 +53,16 @@ class IncidentsTab extends StatelessWidget {
                 ),
                 if (manage && status != 'CLOSED')
                   Wrap(spacing: 8, children: [
-                    if (status == 'OPEN') BusyButton(onPressed: () => act('acknowledge'), child: const Text('Acknowledge')),
-                    if (status == 'ACKNOWLEDGED') BusyButton(filled: false, onPressed: () => act('start'), child: const Text('Start')),
+                    if (status == 'OPEN') BusyButton(onPressed: () => act('acknowledge'), child: Text(tr('acknowledge'))),
+                    if (status == 'ACKNOWLEDGED') BusyButton(filled: false, onPressed: () => act('start'), child: Text(tr('start'))),
                     if (status == 'ACKNOWLEDGED' || status == 'IN_PROGRESS')
                       BusyButton(
                           onPressed: () async {
                             final n = await askText(context, 'Resolution notes');
                             if (n != null) await act('resolve', {'notes': n});
                           },
-                          child: const Text('Resolve')),
-                    if (status == 'RESOLVED') BusyButton(onPressed: () => act('close'), child: const Text('Close')),
+                          child: Text(tr('resolve'))),
+                    if (status == 'RESOLVED') BusyButton(onPressed: () => act('close'), child: Text(tr('close'))),
                   ]),
               ]),
             ),
@@ -98,29 +99,29 @@ class _ReportFormState extends State<_ReportForm> {
           final sites = snap.data ?? const [];
           if (_siteId == null && sites.length == 1) _siteId = '${sites.first['id']}';
           return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            const Text('Report incident', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Text(tr('report_incident'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               initialValue: _siteId,
-              decoration: const InputDecoration(labelText: 'Site', border: OutlineInputBorder()),
+              decoration: InputDecoration(labelText: tr('site'), border: const OutlineInputBorder()),
               items: sites.map((s) => DropdownMenuItem(value: '${s['id']}', child: Text('${s['name']}'))).toList(),
               onChanged: (v) => setState(() => _siteId = v),
             ),
             const SizedBox(height: 12),
             SegmentedButton<String>(
-              segments: const [
-                ButtonSegment(value: 'LOW', label: Text('Low')),
-                ButtonSegment(value: 'MEDIUM', label: Text('Med')),
-                ButtonSegment(value: 'HIGH', label: Text('High')),
-                ButtonSegment(value: 'CRITICAL', label: Text('Critical')),
+              segments: [
+                ButtonSegment(value: 'LOW', label: Text(tr('sev_low'))),
+                ButtonSegment(value: 'MEDIUM', label: Text(tr('sev_medium'))),
+                ButtonSegment(value: 'HIGH', label: Text(tr('sev_high'))),
+                ButtonSegment(value: 'CRITICAL', label: Text(tr('sev_critical'))),
               ],
               selected: {_severity},
               onSelectionChanged: (s) => setState(() => _severity = s.first),
             ),
             const SizedBox(height: 12),
-            TextField(controller: _title, decoration: const InputDecoration(labelText: 'What happened?', border: OutlineInputBorder())),
+            TextField(controller: _title, decoration: InputDecoration(labelText: tr('what_happened'), border: const OutlineInputBorder())),
             const SizedBox(height: 12),
-            TextField(controller: _desc, maxLines: 3, decoration: const InputDecoration(labelText: 'Details', border: OutlineInputBorder())),
+            TextField(controller: _desc, maxLines: 3, decoration: InputDecoration(labelText: tr('details'), border: const OutlineInputBorder())),
             const SizedBox(height: 16),
             BusyButton(
               onPressed: () async {
@@ -129,7 +130,7 @@ class _ReportFormState extends State<_ReportForm> {
                 await widget.session.api.post('/v1/incidents', {'siteId': _siteId, 'severity': _severity, 'title': _title.text.trim(), 'description': _desc.text.trim()});
                 if (context.mounted) Navigator.pop(context, true);
               },
-              child: const Text('Send'),
+              child: Text(tr('send')),
             ),
           ]);
         },

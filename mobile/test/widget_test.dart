@@ -24,8 +24,34 @@ void main() {
     final s = Session();
     await s.init();
     await tester.pumpWidget(MaterialApp(home: LoginScreen(session: s)));
-    expect(find.text('Sign in'), findsOneWidget);
+    // default is the mobile-number step; the password form is one tap away
+    expect(find.text('Send code'), findsOneWidget);
+    expect(find.text('Mobile number'), findsOneWidget);
     expect(find.text('Server address'), findsOneWidget);
     expect(find.text(Brand.name), findsOneWidget);
+    await tester.tap(find.text('Sign in with e-mail / password'));
+    await tester.pump();
+    expect(find.text('Sign in'), findsOneWidget);
+    expect(find.text('Forgot password?'), findsOneWidget);
+  });
+
+  testWidgets('a bad mobile number shows a plain error and sends nothing', (tester) async {
+    SharedPreferences.setMockInitialValues({'server': 'http://localhost:1'});
+    final s = Session();
+    await s.init();
+    await tester.pumpWidget(MaterialApp(home: LoginScreen(session: s)));
+    await tester.enterText(find.byType(TextField).first, '12345');
+    await tester.tap(find.text('Send code'));
+    await tester.pump();
+    expect(find.text('Enter your 10-digit mobile number'), findsOneWidget);
+  });
+
+  testWidgets('last mobile number is prefilled', (tester) async {
+    SharedPreferences.setMockInitialValues({'server': 'http://localhost:1', 'last_phone': '9845100010'});
+    final s = Session();
+    await s.init();
+    await tester.pumpWidget(MaterialApp(home: LoginScreen(session: s)));
+    await tester.pump();
+    expect(find.text('9845100010'), findsOneWidget);
   });
 }

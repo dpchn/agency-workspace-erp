@@ -103,7 +103,7 @@ function Attendance() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Attendance" subtitle="Guards required vs reported at your site each day. Confirm the month, or dispute specific days before it is invoiced."
+      <PageHeader title="Attendance" subtitle={"Guards required vs reported at your site each day." + (data?.signoffEnabled ? " Confirm the month, or dispute specific days before it is invoiced." : "")}
         actions={<>
           <input type="month" className="input w-auto" value={month} onChange={(e) => setMonth(e.target.value)} aria-label="Month" />
           <select className="input w-auto" value={site ?? ""} onChange={(e) => setSiteId(e.target.value)} aria-label="Site">
@@ -117,7 +117,7 @@ function Attendance() {
           <Stat label="Short days" value={days.filter(short).length} tone={days.some(short) ? "red" : undefined} />
         </div>
 
-        <div className={`card text-sm ${so?.status === "CONFIRMED" ? "border-emerald-200 bg-emerald-50" : so?.status === "DISPUTED" ? "border-red-200 bg-red-50" : ""}`}>
+        {data?.signoffEnabled && <div className={`card text-sm ${so?.status === "CONFIRMED" ? "border-emerald-200 bg-emerald-50" : so?.status === "DISPUTED" ? "border-red-200 bg-red-50" : ""}`}>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               {so ? <>
@@ -134,7 +134,7 @@ function Attendance() {
               </div>
             )}
           </div>
-        </div>
+        </div>}
 
         <div className="card overflow-x-auto p-0">
           <table className="w-full border-collapse text-[11px]">

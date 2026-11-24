@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../config/brand.dart';
 import 'action_queue.dart';
 import 'api.dart';
+import 'otp.dart';
 import 'offline_queue.dart';
 
 /// Login state, current user (GET /v1/me) and tenant branding.
@@ -40,10 +41,43 @@ class Session extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Password sign-in (office staff with e-mail, or anyone who set a password). 30-day app session.
   Future<void> login(String server, String login, String password) async {
     api.baseUrl = server.trim();
     api.token = null;
-    final res = await api.post('/v1/auth/login', {'login': login.trim(), 'password': password});
+    final res = await api.post('/v1/auth/login', {'login': login.trim(), 'password': password, 'mobile': true});
+    await _signedIn(res, unlockLogin: login, unlockPassword: password, phone: Otp.normalizePhone(login));
+  }
+
+  /// Step 1 of mobile sign-in / password reset: the server texts a code (same answer for unknown numbers).
+  Future<void> requestOtp(String server, String phone10, {String purpose = 'LOGIN'}) async {
+    api.baseUrl = server.trim();
+    api.token = null;
+    await api.post('/v1/auth/otp/request', {'phone': phone10, 'purpose': purpose});
+    final p = await SharedPreferences.getInstance();
+    await p.setString('server', api.baseUrl);
+    await p.setString('last_phone', phone10);
+  }
+
+  /// Step 2: the SMS code signs the worker in. No password is needed (or stored) for this.
+  Future<void> loginWithOtp(String server, String phone10, String code) async {
+    api.baseUrl = server.trim();
+    api.token = null;
+    final res = await api.post('/v1/auth/otp/verify', {'phone': phone10, 'code': code.trim(), 'mobile': true});
+    await _signedIn(res, phone: phone10);
+  }
+
+  /// Forgot password: SMS code + new password; signs in (and signs out every other device).
+  Future<void> resetPassword(String server, String phone10, String code, String newPassword) async {
+    api.baseUrl = server.trim();
+    api.token = null;
+    final res = await api.post('/v1/auth/otp/reset-password',
+        {'phone': phone10, 'code': code.trim(), 'newPassword': newPassword, 'mobile': true});
+    await _signedIn(res, unlockLogin: phone10, unlockPassword: newPassword, phone: phone10);
+  }
+
+  /// Saves the session the same way for every kind of sign-in.
+  Future<void> _signedIn(dynamic res, {String? unlockLogin, String? unlockPassword, String? phone}) async {
     api.token = res['accessToken'] as String;
     me = Map<String, dynamic>.from(await api.get('/v1/me'));
     final p = await SharedPreferences.getInstance();
@@ -51,9 +85,55 @@ class Session extends ChangeNotifier {
     await p.setString('token', api.token!);
     await p.setString('me', _encode(me!));
     // lets the signed-in person leave kiosk mode later, even offline, without sending the password anywhere
-    await p.setString('unlock', unlockHash(login, password));
-    await p.setString('unlock_login', login);
+    if (unlockLogin != null && unlockPassword != null) {
+      await p.setString('unlock', unlockHash(unlockLogin, unlockPassword));
+      await p.setString('unlock_login', unlockLogin);
+    } else {
+      await p.remove('unlock');
+      await p.remove('unlock_login');
+    }
+    // the number SMS codes go to (kiosk exit without a password); from the sign-in or the profile
+    final ph = phone ?? Otp.normalizePhone('${me!['phone'] ?? ''}');
+    if (ph != null) {
+      await p.setString('unlock_phone', ph);
+      await p.setString('last_phone', ph);
+    } else {
+      await p.remove('unlock_phone');
+    }
     notifyListeners();
+  }
+
+  /// Last mobile number used on this phone (prefilled on the sign-in screen).
+  Future<String?> lastPhone() async => (await SharedPreferences.getInstance()).getString('last_phone');
+
+  /// Whether this person can unlock with a password typed on the phone (they signed in with one).
+  Future<bool> hasUnlockPassword() async => (await SharedPreferences.getInstance()).getString('unlock') != null;
+
+  /// Number an unlock code can be texted to, if any.
+  Future<String?> unlockPhone() async => (await SharedPreferences.getInstance()).getString('unlock_phone');
+
+  /// Kiosk exit for people who signed in by SMS code: text a fresh code to their own number.
+  Future<void> sendUnlockCode() async {
+    final ph = await unlockPhone();
+    if (ph == null) throw ApiException(400, 'NO_PHONE', 'No mobile number on this account');
+    await api.post('/v1/auth/otp/request', {'phone': ph, 'purpose': 'LOGIN'});
+  }
+
+  /// True if [code] is a valid code for the signed-in person's own number. Refreshes the session token.
+  Future<bool> checkOwnCode(String code) async {
+    final ph = await unlockPhone();
+    if (ph == null || !Otp.codeComplete(code)) return false;
+    try {
+      final res = await api.post('/v1/auth/otp/verify', {'phone': ph, 'code': code.trim(), 'mobile': true});
+      if (me?['userId'] != null && res['userId'] != me!['userId']) return false;
+      api.token = res['accessToken'] as String;
+      final p = await SharedPreferences.getInstance();
+      await p.setString('token', api.token!);
+      return true;
+    } on ApiException catch (e) {
+      if (e.isNetwork) rethrow;
+      return false;
+    }
   }
 
   static String unlockHash(String login, String password) => sha256.convert(utf8.encode('${login.trim().toLowerCase()}\n$password')).toString();
@@ -90,6 +170,7 @@ class Session extends ChangeNotifier {
     await p.remove('me');
     await p.remove('unlock');
     await p.remove('unlock_login');
+    await p.remove('unlock_phone');
     await p.remove('kiosk_duties');
   }
 

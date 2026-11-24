@@ -246,6 +246,7 @@ public class BillingService {
     /** Client sign-off of attendance per site for the month: disputes and missing confirmations. */
     List<String> signoffWarnings(UUID clientId, LocalDate month) {
         List<String> out = new ArrayList<>();
+        if (!tenantService.settings().bool("clientSignoffEnabled")) return out;
         jdbc.query("""
                 select si.name, so.status, so.resolved_at is not null as resolved
                 from sites si left join attendance_signoffs so on so.site_id = si.id and so.period_month = ?
@@ -262,7 +263,7 @@ public class BillingService {
     private void issue(Invoice inv) {
         Tenant t = tenantService.current();
         TenantSettings st = tenantService.settings();
-        if ("INVOICE".equals(inv.getKind()) && st.bool("blockInvoiceOnDispute")) {
+        if ("INVOICE".equals(inv.getKind()) && st.bool("clientSignoffEnabled") && st.bool("blockInvoiceOnDispute")) {
             Long open = jdbc.queryForObject("""
                     select count(*) from attendance_signoffs where client_id = ? and period_month = ?
                       and status = 'DISPUTED' and resolved_at is null""", Long.class, inv.getClientId(), inv.getPeriodStart().withDayOfMonth(1));

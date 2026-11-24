@@ -50,12 +50,19 @@ app:
   security:
     jwt-secret: ${JWT_SECRET:change-me-change-me-change-me-change-me-32b}
     access-token-minutes: ${ACCESS_TOKEN_MINUTES:720}
+    mobile-token-days: ${MOBILE_TOKEN_DAYS:30}
     cors-origins: ${CORS_ORIGINS:*}
   signup:
     enabled: ${SIGNUP_ENABLED:true}
     trial-days: ${TRIAL_DAYS:30}
   jobs:
     enabled: ${JOBS_ENABLED:true}
+  sms:
+    provider: ${SMS_PROVIDER:log}
+    http-url: ${SMS_HTTP_URL:}
+    http-method: ${SMS_HTTP_METHOD:GET}
+    http-auth-header: ${SMS_HTTP_AUTH_HEADER:}
+    dev-echo: ${OTP_DEV_ECHO:false}
   platform:
     admin-email: ${PLATFORM_ADMIN_EMAIL:}
     admin-password: ${PLATFORM_ADMIN_PASSWORD:}

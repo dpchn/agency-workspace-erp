@@ -64,6 +64,12 @@ the returned `id` as `photoId`:
 * Attendance records carry `sources` (`MOBILE`, `KIOSK`, `SUPERVISOR`, `MANUAL`). An approval by someone who marked
   the duty for someone else is skipped with a reason.
 
+**App sign-in by mobile number + SMS code.** `POST /v1/auth/otp/request {phone, purpose: LOGIN|RESET}` always
+answers `{sent: true}` (unknown numbers get no code). Then `POST /v1/auth/otp/verify {phone, code, mobile: true}`
+returns the same body as `/v1/auth/login`; `/v1/auth/otp/reset-password {phone, code, newPassword}` sets a new
+password and signs in. Codes: 6 digits, 5 minutes, 5 tries; at most 3 codes per number per 15 minutes, 30 s apart.
+Codes are only sent to active users with an active membership in an active agency (and an active employee record).
+
 ## Endpoints
 
 ### Attendance
@@ -236,6 +242,9 @@ the returned `id` as `photoId`:
 | POST | `/v1/auth/switch-tenant` |  |
 | POST | `/v1/auth/logout-all` |  |
 | POST | `/v1/auth/change-password` |  |
+| POST | `/v1/auth/otp/request` |  |
+| POST | `/v1/auth/otp/verify` |  |
+| POST | `/v1/auth/otp/reset-password` |  |
 | GET | `/v1/me` |  |
 | POST | `/v1/tenants` |  |
 | GET | `/v1/public/brand` |  |

@@ -27,7 +27,9 @@ public record TenantSettings(Map<String, Object> raw) {
             Map.entry("rollCallPhotoRequired", true),          // supervisor roll-call needs a photo of the team
             Map.entry("pinMaxAttempts", 5),                    // wrong kiosk PINs before the PIN locks
             Map.entry("pinLockMinutes", 15),
-            Map.entry("blockInvoiceOnDispute", true),          // a client's unresolved attendance dispute blocks issuing its invoice
+            Map.entry("clientSignoffEnabled", false),          // clients confirm/dispute monthly attendance in the portal (off: the agency
+                                                               // manages attendance alone; nothing waits for the client)
+            Map.entry("blockInvoiceOnDispute", true),          // when sign-off is on: an open dispute blocks issuing that month's invoice
             Map.entry("checkInWindowMinutes", 120),            // how early/late a check-in may match a shift
             Map.entry("lateSubmissionHours", 6),               // offline sync older than this is flagged
             Map.entry("maxAccuracyMeters", 100),

@@ -26,6 +26,9 @@ public class SignoffController {
     private final AuditService audit;
     private final OutboxService outbox;
     private final ObjectMapper mapper;
+    @org.springframework.beans.factory.annotation.Autowired private app.erp.platform.TenantService tenantService;
+
+    private boolean enabled() { return tenantService.settings().bool("clientSignoffEnabled"); }
 
     public SignoffController(JdbcTemplate jdbc, AuditService audit, OutboxService outbox, ObjectMapper mapper) {
         this.jdbc = jdbc;
@@ -51,6 +54,7 @@ public class SignoffController {
         out.put("siteId", site);
         out.putAll(sheet(site, ym));
         out.put("signoff", signoff(site, ym.atDay(1)));
+        out.put("signoffEnabled", enabled());
         return out;
     }
 
@@ -121,6 +125,7 @@ public class SignoffController {
     @Transactional
     public Map<String, Object> signoff(@RequestBody SignoffRequest r) throws Exception {
         var u = Authz.require(Perm.CLIENT_SIGNOFF);
+        if (!enabled()) throw ApiException.invalidState("Attendance sign-off by clients is not used by this agency");
         if (r.siteId() == null) throw ApiException.field("siteId", "Required");
         if (!Set.of("CONFIRMED", "DISPUTED").contains(String.valueOf(r.status()))) throw ApiException.field("status", "CONFIRMED or DISPUTED");
         YearMonth ym;
